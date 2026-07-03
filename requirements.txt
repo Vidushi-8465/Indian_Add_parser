@@ -1,0 +1,19 @@
+# Core dependencies
+fastapi==0.116.1
+uvicorn==0.35.0
+pandas==2.3.2
+openpyxl==3.1.5
+numpy==2.3.2
+pyyaml==6.0.2
+loguru==0.7.3
+elasticsearch==9.1.0
+pydantic==2.11.7
+python-dotenv==1.1.1
+rapidfuzz==3.13.0
+scikit-learn==1.7.1
+xgboost==3.0.4
+transformers==4.55.4
+torch==2.8.0
+datasets==4.0.0
+tqdm==4.67.1
+pytest==8.4.2

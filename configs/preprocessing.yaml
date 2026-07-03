@@ -1,0 +1,110 @@
+# Preprocessing Configuration
+
+paths:
+  input_dataset: datasets/master/master_dataset.csv
+  input_metadata: datasets/master/master_metadata.json
+  output_dataset: datasets/processed/cleaned_dataset.csv
+  output_metadata: datasets/processed/preprocessing_metadata.json
+  preprocessing_report: reports/preprocessing_report.json
+  abbreviations: datasets/dictionaries/abbreviations.json
+  hierarchy_states: datasets/hierarchy/states.csv
+  hierarchy_districts: datasets/hierarchy/districts.csv
+  hierarchy_cities: datasets/hierarchy/cities.csv
+
+full_address_components:
+  - building_name
+  - road_name
+  - locality
+  - city_name
+  - district_name
+  - state_name
+  - pincode
+
+full_address_separator: ", "
+
+quality_weights:
+  building_name: 10
+  road_name: 10
+  locality: 15
+  city_name: 15
+  district_name: 15
+  state_name: 15
+  pincode: 10
+  latitude: 5
+  longitude: 5
+
+symbol_normalization_columns:
+  - building_name
+  - road_name
+  - locality
+  - city_name
+  - office_name
+  - local_body_name
+
+deduplication:
+  subset_columns: null  # null = all columns except serial_number
+  keep: first
+
+null_like_values:
+  - ""
+  - " "
+  - "null"
+  - "none"
+  - "na"
+  - "n/a"
+  - "nan"
+  - "-"
+  - "--"
+  - "."
+
+name_columns:
+  - state_name
+  - state_name_local
+  - district_name
+  - subdistrict_name
+  - block_name
+  - city_name
+  - locality
+  - local_body_name
+  - district_panchayat_name
+  - block_panchayat_name
+  - gram_panchayat_name
+  - office_name
+  - road_name
+  - building_name
+  - region_name
+  - division_name
+  - circle_name
+
+abbreviation_columns:
+  - office_name
+  - road_name
+  - building_name
+  - locality
+  - local_body_name
+
+fill_hierarchy:
+  state_code: state_name
+  district_code: district_name
+  subdistrict_code: subdistrict_name
+  block_code: block_name
+  locality_code: locality
+
+validation:
+  pincode_pattern: "^[1-9][0-9]{5}$"
+  latitude_min: -90.0
+  latitude_max: 90.0
+  longitude_min: -180.0
+  longitude_max: 180.0
+
+string_columns:
+  - serial_number
+  - pincode
+  - state_code
+  - district_code
+  - subdistrict_code
+  - block_code
+  - locality_code
+  - local_body_code
+  - census_2001_code
+  - census_2011_code

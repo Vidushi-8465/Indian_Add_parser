@@ -18,14 +18,31 @@ def normalize_column_name(name: object) -> str:
     return text.strip()
 
 
-def is_subdistrict_column(normalized_name: str) -> bool:
-    """Return True when a normalized column name refers to a sub-district/tehsil level."""
-    compact = normalized_name.replace(" ", "")
+def is_subdistrict_column(name: str) -> bool:
+    """Return True when a column name refers to a sub-district/tehsil level."""
+    normalized = normalize_column_name(name)
+    compact = normalized.replace(" ", "")
     return (
         "subdistrict" in compact
-        or "subdistrict" in normalized_name
-        or normalized_name.startswith("tehsil ")
-        or normalized_name.startswith("taluk ")
-        or " tehsil" in normalized_name
-        or " taluk" in normalized_name
+        or normalized.startswith("tehsil")
+        or normalized.startswith("taluk")
+        or " tehsil" in normalized
+        or " taluk" in normalized
     )
+
+
+def normalize_for_deduplication(text: str) -> str:
+    """
+    Normalize address text for duplicate detection.
+
+    Examples
+    --------
+    "TCS, Hinjewadi" -> "tcs hinjewadi"
+    "TCS Hinjewadi"  -> "tcs hinjewadi"
+    """
+    from utils.regex_utils import DEDUP_PUNCTUATION_PATTERN
+
+    lowered = text.strip().lower()
+    lowered = DEDUP_PUNCTUATION_PATTERN.sub(" ", lowered)
+    return " ".join(lowered.split())
+

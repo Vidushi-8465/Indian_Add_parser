@@ -1,1 +1,34 @@
-{}
+"""Common Indian address abbreviation expansions."""
+
+{
+  "rd": "Road",
+  "st": "Street",
+  "str": "Street",
+  "dr": "Drive",
+  "ave": "Avenue",
+  "blvd": "Boulevard",
+  "ln": "Lane",
+  "extn": "Extension",
+  "ext": "Extension",
+  "ngr": "Nagar",
+  "ng": "Nagar",
+  "col": "Colony",
+  "sec": "Sector",
+  "dist": "District",
+  "opp": "Opposite",
+  "nr": "Near",
+  "po": "Post Office",
+  "bo": "Branch Office",
+  "so": "Sub Office",
+  "ho": "Head Office",
+  "apt": "Apartment",
+  "fl": "Floor",
+  "bldg": "Building",
+  "bh": "Bungalow",
+  "ch": "Chowk",
+  "mkt": "Market",
+  "mandi": "Mandi",
+  "twp": "Township",
+  "vlg": "Village",
+  "gp": "Gram Panchayat"
+}

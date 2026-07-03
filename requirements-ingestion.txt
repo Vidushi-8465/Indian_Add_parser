@@ -1,0 +1,9 @@
+# Minimal dependencies for Phase 2 ingestion only.
+# Use: pip install -r requirements-ingestion.txt
+
+pandas>=2.2.0
+numpy>=2.0.0
+pyyaml>=6.0.2
+loguru>=0.7.3
+rapidfuzz>=3.13.0
+pytest>=8.4.2

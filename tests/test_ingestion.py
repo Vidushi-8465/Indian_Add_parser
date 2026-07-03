@@ -8,19 +8,19 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from ingestion.header_detector import HeaderDetector
 from ingestion.merger import SchemaStandardizer
 from ingestion.pipeline import IngestionPipeline
 from ingestion.validator import DatasetValidator
-from utils.string_utils import normalize_column_name
+from app_logging.logger import setup_logging
+from utils.string_utils import is_subdistrict_column, normalize_column_name
 
 
 @pytest.fixture
 def ingestion_config(tmp_path: Path) -> Path:
     raw_csv = tmp_path / "datasets" / "raw" / "csv"
-    raw_excel = tmp_path / "datasets" / "raw" / "excel"
     master_dir = tmp_path / "datasets" / "master"
     raw_csv.mkdir(parents=True)
-    raw_excel.mkdir(parents=True)
     master_dir.mkdir(parents=True)
 
     pincode_csv = raw_csv / "pincode_sample.csv"
@@ -41,16 +41,16 @@ def ingestion_config(tmp_path: Path) -> Path:
 
     config = tmp_path / "ingestion.yaml"
     project_config = Path(__file__).resolve().parent.parent / "configs" / "ingestion.yaml"
-    config.write_text(project_config.read_text(encoding="utf-8"), encoding="utf-8")
-    config_text = config.read_text(encoding="utf-8")
-    config_text = config_text.replace("datasets/raw/csv", "datasets/raw/csv")
-    config.write_text(config_text, encoding="utf-8")
-
-    updated = config.read_text(encoding="utf-8")
-    updated = updated.replace('raw_csv_dir: datasets/raw/csv', f'raw_csv_dir: {raw_csv.as_posix()}')
-    updated = updated.replace('raw_excel_dir: datasets/raw/excel', f'raw_excel_dir: {raw_excel.as_posix()}')
-    updated = updated.replace('master_dataset: datasets/master/master_dataset.csv', f'master_dataset: {(master_dir / "master_dataset.csv").as_posix()}')
-    updated = updated.replace('master_metadata: datasets/master/master_metadata.json', f'master_metadata: {(master_dir / "master_metadata.json").as_posix()}')
+    updated = project_config.read_text(encoding="utf-8")
+    updated = updated.replace("raw_data_dir: datasets/raw/csv", f"raw_data_dir: {raw_csv.as_posix()}")
+    updated = updated.replace(
+        "master_dataset: datasets/master/master_dataset.csv",
+        f"master_dataset: {(master_dir / 'master_dataset.csv').as_posix()}",
+    )
+    updated = updated.replace(
+        "master_metadata: datasets/master/master_metadata.json",
+        f"master_metadata: {(master_dir / 'master_metadata.json').as_posix()}",
+    )
     config.write_text(updated, encoding="utf-8")
     return config
 
@@ -82,11 +82,90 @@ def test_schema_standardizer_maps_aliases() -> None:
     assert result.dataframe.loc[0, "pincode"] == "500001"
 
 
+def test_subdistrict_columns_do_not_map_to_district() -> None:
+    project_config = Path(__file__).resolve().parent.parent / "configs" / "ingestion.yaml"
+    from utils.file_utils import load_yaml_config
+
+    config = load_yaml_config(project_config)
+    standardizer = SchemaStandardizer(
+        standard_columns=config["standard_columns"],
+        column_aliases=config["column_aliases"],
+    )
+    frame = pd.DataFrame(
+        {
+            "District Code": ["603"],
+            "District Name (In English)": ["Nicobars"],
+            "Subdistrict Code": ["5916"],
+            "Subdistrict Name (In English)": ["Car Nicobar"],
+            "SubDistrict Code": ["5917"],
+            "SubDistrict Name": ["Other Tehsil"],
+        }
+    )
+    result = standardizer.standardize(frame, "gps.csv")
+
+    assert result.column_mapping["District Code"] == "district_code"
+    assert result.column_mapping["District Name (In English)"] == "district_name"
+    assert result.column_mapping["Subdistrict Code"] == "subdistrict_code"
+    assert result.column_mapping["Subdistrict Name (In English)"] == "subdistrict_name"
+    assert result.column_mapping["SubDistrict Code"] == "subdistrict_code"
+    assert result.column_mapping["SubDistrict Name"] == "subdistrict_name"
+    assert result.dataframe.loc[0, "district_code"] == "603"
+    assert result.dataframe.loc[0, "subdistrict_code"] == "5916"
+
+
+def test_is_subdistrict_column_marker() -> None:
+    assert is_subdistrict_column("subdistrict code")
+    assert is_subdistrict_column("sub-district name")
+    assert not is_subdistrict_column("district code")
+
+
 def test_validator_rejects_empty_dataset() -> None:
     validator = DatasetValidator()
     result = validator.validate(pd.DataFrame(), "empty.csv")
     assert result.is_valid is False
     assert result.errors
+
+
+def test_header_detector_selects_alias_row() -> None:
+    setup_logging()
+    project_config = Path(__file__).resolve().parent.parent / "configs" / "ingestion.yaml"
+    from utils.file_utils import load_yaml_config
+
+    config = load_yaml_config(project_config)
+    detector = HeaderDetector(column_aliases=config["column_aliases"], max_scan_rows=20)
+
+    preview = pd.DataFrame(
+        [
+            ["All Development Blocks of India with covered villages", "", "", ""],
+            ["S.No.", "State Code", "State Name (In English)", "pincode"],
+            ["1", "35", "Andaman And Nicobar Islands", "744101"],
+        ]
+    )
+    result = detector.detect(preview, source_file="blocks.csv")
+    assert result.header_row == 1
+    assert result.score > 0
+    assert "state code" in result.matched_aliases
+    assert "pincode" in result.matched_aliases
+
+
+def test_header_detector_skips_blank_rows() -> None:
+    project_config = Path(__file__).resolve().parent.parent / "configs" / "ingestion.yaml"
+    from utils.file_utils import load_yaml_config
+
+    config = load_yaml_config(project_config)
+    detector = HeaderDetector(column_aliases=config["column_aliases"], max_scan_rows=20)
+
+    preview = pd.DataFrame(
+        [
+            ["", "", "", "", "", ""],
+            ["Sl. No.", "City/Town", "Urban Status", "State Code", "State/ Union territory*", "District"],
+            ["", "", "", "", "", ""],
+            ["1", "Hyderabad", "M.Corp", "36", "Telangana", "Hyderabad"],
+        ]
+    )
+    result = detector.detect(preview, source_file="cities.csv")
+    assert result.header_row == 1
+    assert "city town" in result.matched_aliases or "sl no" in result.matched_aliases
 
 
 def test_ingestion_pipeline_builds_master_dataset(ingestion_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,6 +178,7 @@ def test_ingestion_pipeline_builds_master_dataset(ingestion_config: Path, monkey
     assert metadata["files_discovered"] == 2
     assert metadata["files_processed"] == 2
     assert metadata["total_rows"] == 2
+    assert metadata["input_format"] == "csv"
 
     master_path = project_root / "datasets" / "master" / "master_dataset.csv"
     metadata_path = project_root / "datasets" / "master" / "master_metadata.json"

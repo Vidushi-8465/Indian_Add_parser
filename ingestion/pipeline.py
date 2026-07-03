@@ -12,7 +12,7 @@ from typing import Any
 import pandas as pd
 
 from ingestion.csv_loader import CSVLoader
-from ingestion.excel_loader import ExcelLoader
+from ingestion.header_detector import HeaderDetector
 from ingestion.merger import DatasetMerger, SchemaStandardizer
 from ingestion.validator import DatasetValidator
 from utils.constants import DEFAULT_INGESTION_CONFIG, PROJECT_ROOT
@@ -34,24 +34,29 @@ class FileProcessingResult:
     unmapped_columns: list[str] = field(default_factory=list)
     header_row: int | None = None
     encoding: str | None = None
-    sheet_name: str | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
 class IngestionPipeline:
-    """Discover, validate, standardize, and merge raw address datasets."""
+    """Discover, validate, standardize, and merge raw CSV address datasets."""
 
     def __init__(self, config_path: Path | None = None) -> None:
+        from app_logging.logger import setup_logging
+
+        setup_logging()
         self.config_path = config_path or DEFAULT_INGESTION_CONFIG
         self.config = load_yaml_config(self.config_path)
+        reading_config = self.config.get("reading", {})
+        max_scan_rows = reading_config.get("max_header_scan_rows", 20)
+        header_detector = HeaderDetector(
+            column_aliases=self.config["column_aliases"],
+            max_scan_rows=max_scan_rows,
+        )
         self.validator = DatasetValidator()
         self.csv_loader = CSVLoader(
-            encodings=self.config.get("reading", {}).get("encodings"),
-            max_header_scan_rows=self.config.get("reading", {}).get("max_header_scan_rows", 15),
-        )
-        self.excel_loader = ExcelLoader(
-            max_header_scan_rows=self.config.get("reading", {}).get("max_header_scan_rows", 15),
+            header_detector=header_detector,
+            encodings=reading_config.get("encodings"),
         )
         self.standardizer = SchemaStandardizer(
             standard_columns=self.config["standard_columns"],
@@ -71,7 +76,7 @@ class IngestionPipeline:
         global_warnings: list[str] = []
 
         if not source_files:
-            global_warnings.append("No raw data files were discovered.")
+            global_warnings.append("No raw CSV files were discovered.")
 
         for source_file in source_files:
             result, standardized_frame = self._process_file(source_file)
@@ -98,6 +103,7 @@ class IngestionPipeline:
         metadata = {
             "pipeline": "ingestion",
             "version": "1.0",
+            "input_format": "csv",
             "config_path": self._relative_path(self.config_path),
             "started_at": started_at.isoformat(),
             "completed_at": completed_at.isoformat(),
@@ -110,6 +116,7 @@ class IngestionPipeline:
             "standard_columns": master_columns,
             "output_dataset": self._relative_path(output_dataset_path),
             "output_metadata": self._relative_path(output_metadata_path),
+            "merge_statistics": self.merger.get_statistics(),
             "files": [asdict(result) for result in file_results],
             "validation_errors": validation_errors,
             "warnings": global_warnings + [warning for result in file_results for warning in result.warnings],
@@ -123,11 +130,9 @@ class IngestionPipeline:
     def _discover_source_files(self) -> list[Path]:
         paths = self.config["paths"]
         discovery = self.config.get("discovery", {})
-        directories = [
-            resolve_project_path(paths["raw_csv_dir"]),
-            resolve_project_path(paths["raw_excel_dir"]),
-        ]
-        extensions = discovery.get("csv_extensions", [".csv"]) + discovery.get("excel_extensions", [".xlsx", ".xls"])
+        raw_dir = paths.get("raw_data_dir") or paths.get("raw_csv_dir", "datasets/raw/csv")
+        directories = [resolve_project_path(raw_dir)]
+        extensions = discovery.get("csv_extensions", [".csv"])
         return discover_data_files(directories, extensions, recursive=discovery.get("recursive", True))
 
     def _process_file(self, source_file: Path) -> tuple[FileProcessingResult, pd.DataFrame | None]:
@@ -139,14 +144,19 @@ class IngestionPipeline:
         )
 
         try:
-            dataframe, load_warnings, header_row, encoding, sheet_name = self._load_file(source_file)
-            result.warnings.extend(load_warnings)
-            result.header_row = header_row
-            result.encoding = encoding
-            result.sheet_name = sheet_name
-            result.columns_before = len(dataframe.columns)
+            if source_file.suffix.lower() != ".csv":
+                result.errors.append(
+                    f"{source_file.name}: only CSV files are supported. Convert Excel files to CSV before ingestion."
+                )
+                return result, None
 
-            dataframe = self.validator.drop_empty_rows(dataframe)
+            loaded = self.csv_loader.load(source_file)
+            result.warnings.extend(loaded.warnings)
+            result.header_row = loaded.header_row
+            result.encoding = loaded.encoding
+            result.columns_before = len(loaded.dataframe.columns)
+
+            dataframe = self.validator.drop_empty_rows(loaded.dataframe)
             validation = self.validator.validate(dataframe, source_file.name)
             result.warnings.extend(validation.warnings)
 
@@ -169,22 +179,6 @@ class IngestionPipeline:
         except Exception as exc:  # noqa: BLE001 - capture per-file failures
             result.errors.append(str(exc))
             return result, None
-
-    def _load_file(
-        self,
-        source_file: Path,
-    ) -> tuple[pd.DataFrame, list[str], int | None, str | None, str | None]:
-        suffix = source_file.suffix.lower()
-
-        if suffix == ".csv":
-            loaded = self.csv_loader.load(source_file)
-            return loaded.dataframe, loaded.warnings, loaded.header_row, loaded.encoding, None
-
-        if suffix in {".xlsx", ".xls"}:
-            loaded = self.excel_loader.load(source_file)
-            return loaded.dataframe, loaded.warnings, loaded.header_row, None, loaded.sheet_name
-
-        raise ValueError(f"Unsupported file format: {suffix}")
 
     @staticmethod
     def _relative_path(path: Path) -> str:

@@ -1,18 +1,16 @@
 # Data Ingestion Configuration
 
 paths:
-  raw_csv_dir: datasets/raw/csv
-  raw_excel_dir: datasets/raw/excel
+  raw_data_dir: datasets/raw/csv
   master_dataset: datasets/master/master_dataset.csv
   master_metadata: datasets/master/master_metadata.json
 
 discovery:
   csv_extensions: [".csv"]
-  excel_extensions: [".xlsx", ".xls"]
   recursive: true
 
 reading:
-  max_header_scan_rows: 15
+  max_header_scan_rows: 20
   encodings: ["utf-8", "utf-8-sig", "latin-1", "cp1252"]
   csv_read_chunksize: null  # null = read entire file
 
@@ -21,13 +19,36 @@ standard_columns:
   - pincode
   - state_code
   - state_name
+  - state_name_local
+  - state_or_ut
+  - state_version
+  - state_major_version
+  - state_minor_version
   - district_code
   - district_name
+  - subdistrict_code
+  - subdistrict_name
+  - subdistrict_version
+  - block_code
+  - block_name
   - city_name
   - locality
   - locality_code
-  - block_code
-  - block_name
+  - village_category
+  - village_status
+  - village_version
+  - local_body_code
+  - local_body_name
+  - local_body_type_code
+  - local_body_type_name
+  - local_body_major_version
+  - local_body_minor_version
+  - district_panchayat_code
+  - district_panchayat_name
+  - block_panchayat_code
+  - block_panchayat_name
+  - gram_panchayat_code
+  - gram_panchayat_name
   - road_name
   - building_name
   - office_name
@@ -39,7 +60,8 @@ standard_columns:
   - circle_name
   - latitude
   - longitude
-  - census_code
+  - census_2001_code
+  - census_2011_code
   - source_file
 
 column_aliases:
@@ -70,10 +92,24 @@ column_aliases:
     - state name
     - state name (in english)
     - statename
-    - state
     - state/ union territory*
     - state/ union territory
     - state union territory
+  state_name_local:
+    - state name (in local)
+    - state name local
+    - state name in local
+  state_or_ut:
+    - state or ut
+    - state or ut*
+    - state/ut
+    - union territory
+  state_version:
+    - state version
+  state_major_version:
+    - state major version
+  state_minor_version:
+    - state minor version
   district_code:
     - district code
     - district_code
@@ -81,8 +117,36 @@ column_aliases:
   district_name:
     - district name
     - district name (in english)
+    - district name(in english)
     - district
     - dist name
+  subdistrict_code:
+    - subdistrict code
+    - sub-district code
+    - sub district code
+    - subdistrict_code
+    - tehsil code
+    - taluk code
+  subdistrict_name:
+    - subdistrict name
+    - subdistrict name (in english)
+    - sub-district name
+    - sub district name
+    - sub-district name (in english)
+    - tehsil name
+    - taluk name
+  subdistrict_version:
+    - sub-district version
+    - subdistrict version
+  block_code:
+    - development block code
+    - block code
+    - block_code
+  block_name:
+    - development block name
+    - development block name (in english)
+    - block name
+    - block_name
   city_name:
     - city/town
     - city town
@@ -101,15 +165,52 @@ column_aliases:
     - village code
     - locality code
     - locality_code
-  block_code:
-    - development block code
-    - block code
-    - block_code
-  block_name:
-    - development block name
-    - development block name (in english)
-    - block name
-    - block_name
+  village_category:
+    - village category
+  village_status:
+    - village status
+  village_version:
+    - village version
+  local_body_code:
+    - local body code
+    - localbody code
+  local_body_name:
+    - local body name
+    - local body name (in english)
+    - local body name english
+    - localbody name
+  local_body_type_code:
+    - local body type code
+    - local body type code
+  local_body_type_name:
+    - local body type name
+    - localbody type name
+  local_body_major_version:
+    - localbody major version
+    - local body major version
+  local_body_minor_version:
+    - localbody minor version
+    - local body minor version
+  district_panchayat_code:
+    - district panchayat code
+  district_panchayat_name:
+    - district panchayat name
+  block_panchayat_code:
+    - intermediate/block panchayat code
+    - intermediate block panchayat code
+    - block panchayat code
+  block_panchayat_name:
+    - intermediate/block panchayat name
+    - intermediate block panchayat name
+    - block panchayat name
+  gram_panchayat_code:
+    - gram/village panchayat code
+    - gram village panchayat code
+    - village panchayat code
+  gram_panchayat_name:
+    - gram/village panchayat name
+    - gram village panchayat name
+    - village panchayat name
   road_name:
     - road
     - road name
@@ -158,12 +259,16 @@ column_aliases:
     - longitude
     - lon
     - lng
-  census_code:
+  census_2001_code:
+    - census 2001 code
+    - district census 2001 code
+    - subdistrict census 2001 code
+    - village census 2001 code
+  census_2011_code:
     - census 2011 code
-    - census code
     - district census 2011 code
+    - subdistrict census 2011 code
     - village census 2011 code
-    - census_code
 
 dtype_rules:
   string_columns:
@@ -171,9 +276,16 @@ dtype_rules:
     - pincode
     - state_code
     - district_code
+    - subdistrict_code
     - locality_code
     - block_code
-    - census_code
+    - local_body_code
+    - local_body_type_code
+    - district_panchayat_code
+    - block_panchayat_code
+    - gram_panchayat_code
+    - census_2001_code
+    - census_2011_code
   float_columns:
     - latitude
     - longitude

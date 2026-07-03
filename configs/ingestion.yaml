@@ -1,0 +1,179 @@
+# Data Ingestion Configuration
+
+paths:
+  raw_csv_dir: datasets/raw/csv
+  raw_excel_dir: datasets/raw/excel
+  master_dataset: datasets/master/master_dataset.csv
+  master_metadata: datasets/master/master_metadata.json
+
+discovery:
+  csv_extensions: [".csv"]
+  excel_extensions: [".xlsx", ".xls"]
+  recursive: true
+
+reading:
+  max_header_scan_rows: 15
+  encodings: ["utf-8", "utf-8-sig", "latin-1", "cp1252"]
+  csv_read_chunksize: null  # null = read entire file
+
+standard_columns:
+  - serial_number
+  - pincode
+  - state_code
+  - state_name
+  - district_code
+  - district_name
+  - city_name
+  - locality
+  - locality_code
+  - block_code
+  - block_name
+  - road_name
+  - building_name
+  - office_name
+  - office_type
+  - delivery_status
+  - urban_status
+  - region_name
+  - division_name
+  - circle_name
+  - latitude
+  - longitude
+  - census_code
+  - source_file
+
+column_aliases:
+  serial_number:
+    - s.no
+    - s no
+    - sl. no
+    - sl no
+    - serial number
+    - serial_number
+    - sr no
+    - sr. no
+  pincode:
+    - pincode
+    - pin code
+    - pin_code
+    - pin
+    - postal code
+    - postal_code
+    - zipcode
+    - zip code
+    - zip_code
+  state_code:
+    - state code
+    - state_code
+    - st code
+  state_name:
+    - state name
+    - state name (in english)
+    - statename
+    - state
+    - state/ union territory*
+    - state/ union territory
+    - state union territory
+  district_code:
+    - district code
+    - district_code
+    - dist code
+  district_name:
+    - district name
+    - district name (in english)
+    - district
+    - dist name
+  city_name:
+    - city/town
+    - city town
+    - city
+    - town
+    - city name
+    - city_name
+  locality:
+    - locality
+    - village name
+    - village name (in english)
+    - village
+    - area
+    - locality name
+  locality_code:
+    - village code
+    - locality code
+    - locality_code
+  block_code:
+    - development block code
+    - block code
+    - block_code
+  block_name:
+    - development block name
+    - development block name (in english)
+    - block name
+    - block_name
+  road_name:
+    - road
+    - road name
+    - road_name
+    - street
+    - street name
+    - address line 1
+  building_name:
+    - building
+    - building name
+    - building_name
+    - house name
+    - premise
+  office_name:
+    - officename
+    - office name
+    - office_name
+    - post office
+  office_type:
+    - officetype
+    - office type
+    - office_type
+  delivery_status:
+    - delivery
+    - delivery status
+    - delivery_status
+  urban_status:
+    - urban status
+    - urban_status
+  region_name:
+    - regionname
+    - region name
+    - region_name
+  division_name:
+    - divisionname
+    - division name
+    - division_name
+  circle_name:
+    - circlename
+    - circle name
+    - circle_name
+  latitude:
+    - latitude
+    - lat
+  longitude:
+    - longitude
+    - lon
+    - lng
+  census_code:
+    - census 2011 code
+    - census code
+    - district census 2011 code
+    - village census 2011 code
+    - census_code
+
+dtype_rules:
+  string_columns:
+    - serial_number
+    - pincode
+    - state_code
+    - district_code
+    - locality_code
+    - block_code
+    - census_code
+  float_columns:
+    - latitude
+    - longitude

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
+
+_NON_VALUES = {"", "nan", "none", "null", "<na>"}
 
 
 class AddressBuilder:
@@ -26,22 +29,27 @@ class AddressBuilder:
     ) -> pd.DataFrame:
         built = dataframe.copy()
         parts = [column for column in (components or self.DEFAULT_COMPONENTS) if column in built.columns]
-        built["full_address"] = built.apply(
-            lambda row: self._compose_row(row, parts, separator),
-            axis=1,
-        )
-        return built
+        if not parts:
+            built["full_address"] = pd.NA
+            return built
 
-    @staticmethod
-    def _compose_row(row: pd.Series, components: list[str], separator: str) -> object:
-        values: list[str] = []
-        for column in components:
-            value = row.get(column)
-            if pd.isna(value):
-                continue
-            text = str(value).strip()
-            if text and text.lower() not in {"nan", "none", "null"}:
-                values.append(text)
-        if not values:
-            return pd.NA
-        return separator.join(values)
+        chunk = built[parts].astype("string")
+        for column in parts:
+            chunk[column] = chunk[column].str.strip()
+            chunk[column] = chunk[column].mask(chunk[column].str.lower().isin(_NON_VALUES))
+
+        arrays = [chunk[column].fillna("").to_numpy(dtype=object) for column in parts]
+        result = arrays[0]
+        for array in arrays[1:]:
+            both = (result != "") & (array != "")
+            only_right = (result == "") & (array != "")
+            result = np.where(
+                both,
+                result + separator + array,
+                np.where(only_right, array, result),
+            )
+
+        full_address = pd.Series(result, index=built.index, dtype=object)
+        full_address = full_address.mask(full_address == "", pd.NA)
+        built["full_address"] = full_address
+        return built

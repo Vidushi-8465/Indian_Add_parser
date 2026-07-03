@@ -46,9 +46,15 @@ class AddressNormalizer:
             if not canonical_map:
                 canonical_map = self._build_canonical_map(standardized[column])
 
-            standardized[column] = standardized[column].apply(
-                lambda value: self._apply_canonical(value, canonical_map)
-            )
+            keys = standardized[column].map(self._normalize_key)
+            mapped = keys.map(canonical_map)
+            missing = mapped.isna() & keys.ne("") & standardized[column].notna()
+            if missing.any():
+                mapped.loc[missing] = standardized.loc[missing, column].map(
+                    lambda value: self.title_case_words(str(value).strip())
+                )
+            standardized[column] = mapped
+            standardized.loc[keys == "", column] = pd.NA
         return standardized
 
     def validate_pincode(self, dataframe: pd.DataFrame) -> tuple[pd.DataFrame, int]:
@@ -56,16 +62,14 @@ class AddressNormalizer:
             return dataframe, 0
 
         validated = dataframe.copy()
-        invalid_count = 0
-        for index, value in validated["pincode"].items():
-            if pd.isna(value):
-                continue
-            pincode = str(value).strip().split(".")[0]
-            if not PINCODE_PATTERN.fullmatch(pincode):
-                validated.at[index, "pincode"] = pd.NA
-                invalid_count += 1
-            else:
-                validated.at[index, "pincode"] = pincode
+        raw = validated["pincode"]
+        present = raw.notna() & (raw.astype(str).str.strip() != "")
+        cleaned = raw.astype(str).str.strip().str.split(".").str[0]
+        valid = present & cleaned.str.fullmatch(PINCODE_PATTERN.pattern)
+        invalid_count = int((present & ~valid).sum())
+
+        validated.loc[present & valid, "pincode"] = cleaned[present & valid]
+        validated.loc[present & ~valid, "pincode"] = pd.NA
         return validated, invalid_count
 
     def validate_coordinates(self, dataframe: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:
@@ -96,33 +100,23 @@ class AddressNormalizer:
         maximum: float,
     ) -> tuple[pd.DataFrame, int]:
         validated = dataframe.copy()
-        invalid_count = 0
+        raw = validated[column]
+        present = raw.notna() & (raw.astype(str).str.strip() != "")
+        numeric = pd.to_numeric(raw, errors="coerce")
+        valid = present & numeric.notna() & (numeric >= minimum) & (numeric <= maximum)
+        invalid_count = int((present & ~valid).sum())
 
-        for index, value in validated[column].items():
-            if pd.isna(value):
-                continue
-            try:
-                number = float(str(value).strip())
-            except ValueError:
-                validated.at[index, column] = pd.NA
-                invalid_count += 1
-                self.logger.warning("Invalid {} value '{}' at row {} set to null", column, value, index)
-                continue
+        if invalid_count:
+            self.logger.warning(
+                "Found {} invalid {} values (allowed {} to {}); set to null",
+                invalid_count,
+                column,
+                minimum,
+                maximum,
+            )
 
-            if number < minimum or number > maximum:
-                validated.at[index, column] = pd.NA
-                invalid_count += 1
-                self.logger.warning(
-                    "Out-of-range {} value '{}' at row {} set to null (allowed {} to {})",
-                    column,
-                    value,
-                    index,
-                    minimum,
-                    maximum,
-                )
-            else:
-                validated.at[index, column] = number
-
+        validated.loc[present & valid, column] = raw[present & valid].astype(str).str.strip()
+        validated.loc[present & ~valid, column] = pd.NA
         return validated, invalid_count
 
     @staticmethod
@@ -160,10 +154,14 @@ class AddressNormalizer:
             return {}
 
         path = resolve_project_path(hierarchy_path)
-        if not path.exists():
+        if not path.exists() or path.stat().st_size == 0:
             return {}
 
-        frame = pd.read_csv(path, dtype=str)
+        try:
+            frame = pd.read_csv(path, dtype=str)
+        except pd.errors.EmptyDataError:
+            return {}
+
         if frame.empty or len(frame.columns) == 0:
             return {}
 

@@ -113,7 +113,7 @@ class SchemaStandardizer:
         best_score = 0.0
         best_column: str | None = None
         for alias, standard in self.alias_lookup.items():
-            if self._is_incompatible_fuzzy_match(normalized, standard):
+            if self._is_incompatible_fuzzy_match(original_column, standard):
                 continue
 
             score = fuzz.ratio(normalized, alias)
@@ -127,9 +127,9 @@ class SchemaStandardizer:
         return None, 0.0, "unmapped"
 
     @staticmethod
-    def _is_incompatible_fuzzy_match(normalized_column: str, standard_column: str) -> bool:
+    def _is_incompatible_fuzzy_match(original_column: str, standard_column: str) -> bool:
         """Prevent fuzzy matches that collapse distinct administrative levels."""
-        column_is_subdistrict = is_subdistrict_column(normalized_column)
+        column_is_subdistrict = is_subdistrict_column(original_column)
         standard_is_subdistrict = standard_column.startswith("subdistrict_")
         standard_is_district = standard_column.startswith("district_")
 
@@ -140,22 +140,11 @@ class SchemaStandardizer:
         return False
 
     def _merge_columns(self, existing: pd.Series, incoming: pd.Series) -> pd.Series:
+        """Coalesce duplicate mappings; keep the first non-null value."""
         merged = existing.copy()
         for idx in merged.index:
-            left = merged.iloc[idx]
-            right = incoming.iloc[idx]
-
-            if pd.isna(left):
-                merged.iloc[idx] = right
-                continue
-            if pd.isna(right):
-                continue
-
-            left_text = str(left).strip()
-            right_text = str(right).strip()
-            if len(right_text) > len(left_text):
-                merged.iloc[idx] = right
-
+            if pd.isna(merged.iloc[idx]) and not pd.isna(incoming.iloc[idx]):
+                merged.iloc[idx] = incoming.iloc[idx]
         return merged
 
     def _apply_dtype_rules(self, dataframe: pd.DataFrame) -> pd.DataFrame:

@@ -125,6 +125,7 @@ column_aliases:
     - sub-district code
     - sub district code
     - subdistrict_code
+    - subdistrictcode
     - tehsil code
     - taluk code
   subdistrict_name:
@@ -133,6 +134,7 @@ column_aliases:
     - sub-district name
     - sub district name
     - sub-district name (in english)
+    - subdistrictname
     - tehsil name
     - taluk name
   subdistrict_version:

@@ -26,6 +26,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    print("Starting preprocessing pipeline...", flush=True)
+    print(f"Config: {args.config}", flush=True)
+    print("Progress will appear below and in logs/app.log", flush=True)
+
     pipeline = PreprocessingPipeline(config_path=args.config)
     metadata = pipeline.run()
 

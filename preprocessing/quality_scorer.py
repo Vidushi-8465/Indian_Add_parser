@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+_NULL_LIKE = {"nan", "none", "null", "na", "n/a"}
+
 
 class QualityScorer:
     """Score each row based on completeness of key address fields."""
@@ -32,21 +34,15 @@ class QualityScorer:
             scored["quality_score"] = 0.0
             return scored
 
-        scored["quality_score"] = scored.apply(
-            lambda row: self._score_row(row, total_weight),
-            axis=1,
-        )
-        return scored
-
-    def _score_row(self, row: pd.Series, total_weight: float) -> float:
-        earned = 0.0
+        earned = pd.Series(0.0, index=scored.index)
         for field, weight in self.field_weights.items():
-            if field not in row.index:
+            if field not in scored.columns:
                 continue
-            value = row[field]
-            if pd.isna(value):
-                continue
-            text = str(value).strip()
-            if text and text.lower() not in {"nan", "none", "null", "na", "n/a"}:
-                earned += weight
-        return round((earned / total_weight) * 100, 2)
+            column = scored[field]
+            valid = column.notna()
+            text = column.astype(str).str.strip()
+            valid &= ~text.str.lower().isin(_NULL_LIKE) & (text != "")
+            earned += valid.astype(float) * weight
+
+        scored["quality_score"] = (earned / total_weight * 100).round(2)
+        return scored

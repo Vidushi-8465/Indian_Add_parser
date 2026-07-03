@@ -24,6 +24,7 @@ def is_subdistrict_column(name: str) -> bool:
     compact = normalized.replace(" ", "")
     return (
         "subdistrict" in compact
+        or normalized.startswith("sub district")
         or normalized.startswith("tehsil")
         or normalized.startswith("taluk")
         or " tehsil" in normalized

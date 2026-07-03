@@ -1,0 +1,58 @@
+# Elasticsearch Configuration
+
+connection:
+  hosts:
+    - http://localhost:9200
+  username: null   # override via ELASTIC_USERNAME env
+  password: null   # override via ELASTIC_PASSWORD env
+  verify_certs: false
+  request_timeout: 120
+  max_retries: 3
+
+index:
+  name: indian_addresses
+  number_of_shards: 3
+  number_of_replicas: 0
+  refresh_interval: 30s
+
+indexing:
+  input_dataset: datasets/processed/cleaned_dataset.csv
+  batch_size: 2000
+  read_chunk_size: 20000
+  max_retries: 3
+  retry_backoff_seconds: 2
+  progress_every_batches: 5
+  id_field: address_hash
+  fallback_id_prefix: row
+
+search:
+  default_size: 20
+  max_size: 100
+  fuzzy_fuzziness: AUTO
+  phrase_slop: 2
+  autocomplete_min_chars: 2
+  geo_default_distance: 5km
+  quality_score_boost: 0.05
+
+paths:
+  indexing_report: reports/indexing_report.json
+  performance_report: reports/indexing_performance_report.json
+  indexing_log: logs/indexing.log
+  search_log: logs/search.log
+
+source_fields:
+  - address_hash
+  - full_address
+  - building_name
+  - road_name
+  - locality
+  - city_name
+  - district_name
+  - subdistrict_name
+  - state_name
+  - pincode
+  - office_name
+  - latitude
+  - longitude
+  - quality_score
+  - source_file

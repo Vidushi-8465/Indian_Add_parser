@@ -1,5 +1,3 @@
-"""Common Indian address abbreviation expansions."""
-
 {
   "rd": "Road",
   "st": "Street",

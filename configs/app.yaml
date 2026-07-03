@@ -1,0 +1,13 @@
+# Application Configuration
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  title: Indian Address Geocoding API
+  description: Search API returning candidate addresses for downstream NER/ML ranking
+  version: 1.0.0
+  top_k: 20
+  reload: false
+
+elasticsearch_config: configs/elasticsearch.yaml
+log_level: INFO

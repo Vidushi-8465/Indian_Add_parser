@@ -24,6 +24,7 @@ def setup_logging(log_level: str = "INFO") -> None:
     logger.add(
         sys.stderr,
         level=log_level,
+        enqueue=False,
         format=(
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
             "<level>{level:<8}</level> | "
@@ -35,6 +36,7 @@ def setup_logging(log_level: str = "INFO") -> None:
         LOG_DIR / "app.log",
         level=log_level,
         rotation="10 MB",
+        enqueue=False,
         format="{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {extra[module]} - {message}",
     )
     _CONFIGURED = True

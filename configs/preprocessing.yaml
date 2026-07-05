@@ -3,9 +3,10 @@
 paths:
   input_dataset: datasets/master/master_dataset.csv
   input_metadata: datasets/master/master_metadata.json
-  output_dataset: datasets/processed/cleaned_dataset.csv
+  output_dataset: datasets/processed/final_clean_dataset.csv
   output_metadata: datasets/processed/preprocessing_metadata.json
   preprocessing_report: reports/preprocessing_report.json
+  preprocessing_log: logs/preprocessing.log
   abbreviations: datasets/dictionaries/abbreviations.json
   hierarchy_states: datasets/hierarchy/states.csv
   hierarchy_districts: datasets/hierarchy/districts.csv
@@ -21,6 +22,19 @@ full_address_components:
   - pincode
 
 full_address_separator: ", "
+
+searchable_text_components:
+  - building_name
+  - road_name
+  - locality
+  - city_name
+  - district_name
+  - subdistrict_name
+  - state_name
+  - pincode
+  - office_name
+
+searchable_text_separator: " "
 
 quality_weights:
   building_name: 10
@@ -97,6 +111,34 @@ validation:
   longitude_min: -180.0
   longitude_max: 180.0
 
+address_validation:
+  require_full_address: true
+  require_address_hash: true
+  min_location_fields: 2
+  location_fields:
+    - locality
+    - city_name
+    - district_name
+    - state_name
+    - pincode
+  min_quality_score: 15.0
+  require_pincode_or_coordinates: true
+
+admin_code_columns:
+  - pincode
+  - state_code
+  - district_code
+  - subdistrict_code
+  - block_code
+  - locality_code
+  - local_body_code
+  - local_body_type_code
+  - district_panchayat_code
+  - block_panchayat_code
+  - gram_panchayat_code
+  - census_2001_code
+  - census_2011_code
+
 string_columns:
   - serial_number
   - pincode
@@ -106,5 +148,9 @@ string_columns:
   - block_code
   - locality_code
   - local_body_code
+  - local_body_type_code
+  - district_panchayat_code
+  - block_panchayat_code
+  - gram_panchayat_code
   - census_2001_code
   - census_2011_code

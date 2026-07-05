@@ -15,12 +15,15 @@ from loguru import logger
 from preprocessing.abbreviation_expander import AbbreviationExpander
 from preprocessing.address_builder import AddressBuilder
 from preprocessing.address_deduplicator import AddressDeduplicator
+from preprocessing.address_validator import AddressValidator
 from preprocessing.cleaner import DataCleaner
 from preprocessing.deduplicator import Deduplicator
+from preprocessing.dtype_enforcer import DtypeEnforcer
 from preprocessing.normalizer import AddressNormalizer
 from preprocessing.null_handler import NullHandler
 from preprocessing.quality_scorer import QualityScorer
 from preprocessing.report_generator import ReportGenerator
+from preprocessing.searchable_text_builder import SearchableTextBuilder
 from preprocessing.statistics import DatasetStatistics
 from preprocessing.symbol_normalizer import SymbolNormalizer
 from preprocessing.unicode_normalizer import UnicodeNormalizer
@@ -39,6 +42,8 @@ class PreprocessingStats:
     invalid_pincodes: int = 0
     invalid_latitude_values: int = 0
     invalid_longitude_values: int = 0
+    invalid_addresses_removed: int = 0
+    duplicate_hashes_removed: int = 0
     filled_values: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
@@ -47,14 +52,19 @@ class PreprocessingPipeline:
     """Clean, normalize, validate, and export the ingested master dataset."""
 
     def __init__(self, config_path: Path | None = None) -> None:
-        from app_logging.logger import setup_logging
+        from app_logging.logger import setup_logging, setup_preprocessing_logging
 
         setup_logging()
         self.logger = logger.bind(module="preprocessing.pipeline")
         self.config_path = config_path or DEFAULT_PREPROCESSING_CONFIG
         self.config = load_yaml_config(self.config_path)
+        log_path = resolve_project_path(
+            self.config.get("paths", {}).get("preprocessing_log", "logs/preprocessing.log")
+        )
+        setup_preprocessing_logging(log_path)
         self.deduplicator = Deduplicator()
         self.address_deduplicator = AddressDeduplicator()
+        self.address_validator = AddressValidator()
         self.cleaner = DataCleaner()
         self.symbol_normalizer = SymbolNormalizer()
         self.unicode_normalizer = UnicodeNormalizer()
@@ -64,7 +74,9 @@ class PreprocessingPipeline:
         )
         self.normalizer = AddressNormalizer()
         self.address_builder = AddressBuilder()
+        self.searchable_text_builder = SearchableTextBuilder()
         self.quality_scorer = QualityScorer(self.config.get("quality_weights"))
+        self.dtype_enforcer = DtypeEnforcer()
         self.statistics = DatasetStatistics()
         self.report_generator = ReportGenerator()
 
@@ -81,9 +93,14 @@ class PreprocessingPipeline:
         self.logger.info("Starting preprocessing | input={}", input_path)
 
         step_start = perf_counter()
-        dataframe = pd.read_csv(input_path, dtype=str, keep_default_na=False)
+        dataframe = pd.read_csv(input_path, keep_default_na=False)
         stats.rows_input = len(dataframe.index)
         self._log_step("Loaded input dataset", step_start, stats.rows_input)
+
+        admin_code_columns = self._resolve_admin_code_columns(dataframe)
+        step_start = perf_counter()
+        dataframe = self.normalizer.normalize_admin_codes(dataframe, admin_code_columns)
+        self._log_step("Normalized pincode and administrative code columns", step_start, len(dataframe.index))
 
         string_columns = self._resolve_string_columns(dataframe)
         name_columns = [column for column in self.config.get("name_columns", []) if column in dataframe.columns]
@@ -187,8 +204,49 @@ class PreprocessingPipeline:
         self._log_step("Computed quality scores", step_start, len(dataframe.index))
 
         step_start = perf_counter()
+        dataframe = self.searchable_text_builder.build(
+            dataframe,
+            components=self.config.get("searchable_text_components"),
+            separator=self.config.get("searchable_text_separator", " "),
+        )
+        self._log_step("Built searchable_text", step_start, len(dataframe.index))
+
+        step_start = perf_counter()
+        dataframe, stats.invalid_addresses_removed = self.address_validator.filter_invalid_addresses(
+            dataframe,
+            self.config.get("address_validation", {}),
+        )
+        self._log_step(
+            f"Removed invalid addresses ({stats.invalid_addresses_removed})",
+            step_start,
+            len(dataframe.index),
+        )
+
+        step_start = perf_counter()
+        dataframe, stats.duplicate_hashes_removed = self.address_deduplicator.ensure_unique_hashes(
+            dataframe
+        )
+        if stats.duplicate_hashes_removed:
+            stats.warnings.append(
+                f"Removed {stats.duplicate_hashes_removed} duplicate address_hash rows in final pass"
+            )
+        self._log_step(
+            f"Ensured unique address hashes ({stats.duplicate_hashes_removed} removed)",
+            step_start,
+            len(dataframe.index),
+        )
+
+        step_start = perf_counter()
+        dataframe = self.dtype_enforcer.enforce(dataframe, self.config)
+        dataframe = self.normalizer.normalize_admin_codes(dataframe, admin_code_columns)
+        self._log_step("Enforced output datatypes", step_start, len(dataframe.index))
+
+        step_start = perf_counter()
         dataset_statistics = self.statistics.compute(dataframe)
         stats.rows_output = len(dataframe.index)
+        duplicate_hashes = int(dataset_statistics.get("duplicate_address_hashes", 0))
+        if duplicate_hashes:
+            stats.warnings.append(f"Found {duplicate_hashes} duplicate address_hash values after cleanup")
         self._log_step("Computed dataset statistics", step_start, len(dataframe.index))
 
         step_start = perf_counter()
@@ -208,6 +266,9 @@ class PreprocessingPipeline:
             "input_dataset": self._relative_path(input_path),
             "output_dataset": self._relative_path(output_path),
             "preprocessing_report": self._relative_path(report_path),
+            "preprocessing_log": self._relative_path(
+                resolve_project_path(self.config.get("paths", {}).get("preprocessing_log", "logs/preprocessing.log"))
+            ),
             "statistics": asdict(stats),
             "dataset_statistics": dataset_statistics,
         }
@@ -228,6 +289,10 @@ class PreprocessingPipeline:
     def _log_step(self, message: str, step_start: float, rows: int) -> None:
         elapsed = perf_counter() - step_start
         self.logger.info("{} | rows={} | {:.1f}s", message, rows, elapsed)
+
+    def _resolve_admin_code_columns(self, dataframe: pd.DataFrame) -> list[str]:
+        configured = self.config.get("admin_code_columns", self.config.get("string_columns", []))
+        return [column for column in configured if column in dataframe.columns]
 
     def _resolve_string_columns(self, dataframe: pd.DataFrame) -> list[str]:
         configured = self.config.get("string_columns", [])

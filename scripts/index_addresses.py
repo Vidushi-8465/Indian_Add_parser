@@ -1,4 +1,4 @@
-"""Bulk index cleaned_dataset.csv into Elasticsearch."""
+"""Bulk index final_clean_dataset.csv into Elasticsearch."""
 
 from __future__ import annotations
 

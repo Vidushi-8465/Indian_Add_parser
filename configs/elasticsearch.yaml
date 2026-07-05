@@ -16,7 +16,7 @@ index:
   refresh_interval: 30s
 
 indexing:
-  input_dataset: datasets/processed/cleaned_dataset.csv
+  input_dataset: datasets/processed/final_clean_dataset.csv
   batch_size: 2000
   read_chunk_size: 20000
   max_retries: 3
@@ -43,6 +43,7 @@ paths:
 source_fields:
   - address_hash
   - full_address
+  - searchable_text
   - building_name
   - road_name
   - locality

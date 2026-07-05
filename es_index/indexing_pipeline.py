@@ -59,7 +59,9 @@ class IndexingPipeline:
         stats = IndexingPipelineStats()
 
         indexing_config = self.config.get("indexing", {})
-        input_path = resolve_project_path(indexing_config.get("input_dataset", "datasets/processed/cleaned_dataset.csv"))
+        input_path = resolve_project_path(
+            indexing_config.get("input_dataset", "datasets/processed/final_clean_dataset.csv")
+        )
         indexing_report_path = resolve_project_path(self.config["paths"]["indexing_report"])
         performance_report_path = resolve_project_path(self.config["paths"]["performance_report"])
 

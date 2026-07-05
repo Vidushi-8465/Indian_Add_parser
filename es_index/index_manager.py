@@ -72,6 +72,7 @@ def build_index_mappings() -> dict[str, Any]:
         "properties": {
             "address_hash": {"type": "keyword"},
             "full_address": text_with_keyword,
+            "searchable_text": text_with_keyword,
             "building_name": autocomplete_field,
             "road_name": text_with_keyword,
             "locality": autocomplete_field,

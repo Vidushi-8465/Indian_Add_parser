@@ -18,7 +18,6 @@ class DatasetStatistics:
             "quality_score": self._quality_summary(dataframe),
             "null_percentages": self._null_percentages(dataframe),
             "unique_counts": self._unique_counts(dataframe),
-            "searchable_text_coverage": self._field_coverage(dataframe, "searchable_text"),
             "pincode_coverage": self._field_coverage(dataframe, "pincode"),
             "coordinate_coverage": {
                 "latitude": self._field_coverage(dataframe, "latitude"),
@@ -75,7 +74,6 @@ class DatasetStatistics:
             "locality",
             "pincode",
             "address_hash",
-            "searchable_text",
         ]
         return {
             field: int(dataframe[field].nunique(dropna=True))

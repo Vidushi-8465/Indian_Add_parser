@@ -3,11 +3,17 @@
 connection:
   hosts:
     - http://localhost:9200
-  username: null   # override via ELASTIC_USERNAME env
-  password: null   # override via ELASTIC_PASSWORD env
+  username: null   # override via ELASTIC_USERNAME in .env
+  password: null   # override via ELASTIC_PASSWORD in .env
   verify_certs: false
   request_timeout: 120
   max_retries: 3
+  retry_backoff_seconds: 2
+
+analysis:
+  synonyms_file: datasets/dictionaries/address_synonyms.txt
+  edge_ngram_min: 2
+  edge_ngram_max: 20
 
 index:
   name: indian_addresses
@@ -16,7 +22,7 @@ index:
   refresh_interval: 30s
 
 indexing:
-  input_dataset: datasets/processed/final_clean_dataset.csv
+  input_dataset: datasets/processed/cleaned_dataset.csv
   batch_size: 2000
   read_chunk_size: 20000
   max_retries: 3

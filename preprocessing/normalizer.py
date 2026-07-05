@@ -9,7 +9,6 @@ from loguru import logger
 
 from utils.file_utils import resolve_project_path
 from utils.regex_utils import PINCODE_PATTERN
-from utils.string_utils import coerce_identifier_string
 
 
 class AddressNormalizer:
@@ -58,32 +57,19 @@ class AddressNormalizer:
             standardized.loc[keys == "", column] = pd.NA
         return standardized
 
-    def normalize_admin_codes(
-        self,
-        dataframe: pd.DataFrame,
-        columns: list[str],
-    ) -> pd.DataFrame:
-        """Cast pincode and administrative code columns to clean string values."""
-        normalized = dataframe.copy()
-        for column in columns:
-            if column not in normalized.columns:
-                continue
-            normalized[column] = normalized[column].map(coerce_identifier_string).astype("string")
-        return normalized
-
     def validate_pincode(self, dataframe: pd.DataFrame) -> tuple[pd.DataFrame, int]:
         if "pincode" not in dataframe.columns:
             return dataframe, 0
 
         validated = dataframe.copy()
-        raw = validated["pincode"].map(coerce_identifier_string)
+        raw = validated["pincode"]
         present = raw.notna() & (raw.astype(str).str.strip() != "")
-        valid = present & raw.astype(str).str.fullmatch(PINCODE_PATTERN.pattern)
+        cleaned = raw.astype(str).str.strip().str.split(".").str[0]
+        valid = present & cleaned.str.fullmatch(PINCODE_PATTERN.pattern)
         invalid_count = int((present & ~valid).sum())
 
-        validated["pincode"] = pd.NA
-        validated.loc[present & valid, "pincode"] = raw.loc[present & valid].astype(str)
-        validated["pincode"] = validated["pincode"].astype("string")
+        validated.loc[present & valid, "pincode"] = cleaned[present & valid]
+        validated.loc[present & ~valid, "pincode"] = pd.NA
         return validated, invalid_count
 
     def validate_coordinates(self, dataframe: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:

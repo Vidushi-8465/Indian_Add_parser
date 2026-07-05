@@ -10,14 +10,12 @@ import pytest
 from preprocessing.abbreviation_expander import AbbreviationExpander
 from preprocessing.address_builder import AddressBuilder
 from preprocessing.address_deduplicator import AddressDeduplicator
-from preprocessing.address_validator import AddressValidator
 from preprocessing.cleaner import DataCleaner
 from preprocessing.deduplicator import Deduplicator
 from preprocessing.normalizer import AddressNormalizer
 from preprocessing.null_handler import NullHandler
 from preprocessing.preprocessing_pipeline import PreprocessingPipeline
 from preprocessing.quality_scorer import QualityScorer
-from preprocessing.searchable_text_builder import SearchableTextBuilder
 from preprocessing.statistics import DatasetStatistics
 from preprocessing.symbol_normalizer import SymbolNormalizer
 from utils.hash_utils import compute_address_hash
@@ -63,54 +61,6 @@ def test_symbol_normalizer_cleans_sector_dash_pattern() -> None:
     frame = pd.DataFrame({"locality": ["sector - 21", "Block#A"]})
     result = SymbolNormalizer().normalize(frame, ["locality"])
     assert result.loc[0, "locality"] == "sector 21"
-
-
-def test_searchable_text_builder_combines_fields() -> None:
-    frame = pd.DataFrame(
-        {
-            "building_name": ["TCS"],
-            "road_name": ["Rajiv Gandhi Infotech Park"],
-            "locality": ["Hinjewadi"],
-            "city_name": ["Pune"],
-            "state_name": ["Maharashtra"],
-            "pincode": ["411057"],
-        }
-    )
-    result = SearchableTextBuilder().build(frame)
-    text = result.loc[0, "searchable_text"]
-    assert "tcs" in text
-    assert "hinjewadi" in text
-    assert "411057" in text
-
-
-def test_address_validator_removes_rows_without_pincode_or_coordinates() -> None:
-    frame = pd.DataFrame(
-        {
-            "full_address": ["TCS, Hinjewadi, Pune, Maharashtra, 411057", "Bad, Bad, Bad"],
-            "address_hash": ["hash-a", "hash-b"],
-            "locality": ["Hinjewadi", "Bad"],
-            "city_name": ["Pune", "Bad"],
-            "district_name": ["Pune", "Bad"],
-            "state_name": ["Maharashtra", "Bad"],
-            "pincode": ["411057", pd.NA],
-            "latitude": ["18.59", pd.NA],
-            "longitude": ["73.73", pd.NA],
-            "quality_score": [80.0, 80.0],
-        }
-    )
-    filtered, removed = AddressValidator().filter_invalid_addresses(
-        frame,
-        {
-            "require_full_address": True,
-            "require_address_hash": True,
-            "min_location_fields": 2,
-            "location_fields": ["locality", "city_name", "district_name", "state_name", "pincode"],
-            "require_pincode_or_coordinates": True,
-        },
-    )
-    assert removed == 1
-    assert len(filtered.index) == 1
-    assert filtered.loc[0, "address_hash"] == "hash-a"
 
 
 def test_address_builder_composes_full_address() -> None:
@@ -167,7 +117,7 @@ def test_normalizer_validates_pincode_and_coordinates() -> None:
     normalizer = AddressNormalizer()
     frame = pd.DataFrame(
         {
-            "pincode": ["012345", "500001", "abc", 500001.0],
+            "pincode": ["012345", "500001", "abc"],
             "latitude": ["95", "17.38", "invalid"],
             "longitude": ["200", "78.48", "bad"],
         }
@@ -178,41 +128,8 @@ def test_normalizer_validates_pincode_and_coordinates() -> None:
     assert invalid_pincodes == 2
     assert pd.isna(frame.loc[0, "pincode"])
     assert frame.loc[1, "pincode"] == "500001"
-    assert frame.loc[3, "pincode"] == "500001"
     assert invalid_coords["latitude"] == 2
     assert invalid_coords["longitude"] == 2
-
-
-def test_normalizer_converts_admin_codes_to_strings() -> None:
-    normalizer = AddressNormalizer()
-    frame = pd.DataFrame(
-        {
-            "pincode": [411057.0, "411058.0", None],
-            "state_code": [27.0, "28", 29.0],
-            "district_code": [603.0, "604.0", None],
-            "local_body_type_code": [1.0, "2.0", 3.0],
-            "census_2011_code": [123456.0, "123457.0", None],
-        }
-    )
-    result = normalizer.normalize_admin_codes(
-        frame,
-        [
-            "pincode",
-            "state_code",
-            "district_code",
-            "local_body_type_code",
-            "census_2011_code",
-        ],
-    )
-
-    assert result["pincode"].dtype == "string"
-    assert result.loc[0, "pincode"] == "411057"
-    assert result.loc[1, "pincode"] == "411058"
-    assert pd.isna(result.loc[2, "pincode"])
-    assert result.loc[0, "state_code"] == "27"
-    assert result.loc[1, "district_code"] == "604"
-    assert result.loc[0, "local_body_type_code"] == "1"
-    assert result.loc[0, "census_2011_code"] == "123456"
 
 
 def test_abbreviation_expander_replaces_known_tokens() -> None:
@@ -260,8 +177,8 @@ def test_preprocessing_pipeline_runs_on_sample(tmp_path: Path) -> None:
         f"input_dataset: {master_file.as_posix()}",
     )
     updated = updated.replace(
-        "output_dataset: datasets/processed/final_clean_dataset.csv",
-        f"output_dataset: {(processed_dir / 'final_clean_dataset.csv').as_posix()}",
+        "output_dataset: datasets/processed/cleaned_dataset.csv",
+        f"output_dataset: {(processed_dir / 'cleaned_dataset.csv').as_posix()}",
     )
     updated = updated.replace(
         "output_metadata: datasets/processed/preprocessing_metadata.json",
@@ -281,16 +198,12 @@ def test_preprocessing_pipeline_runs_on_sample(tmp_path: Path) -> None:
     assert metadata["statistics"]["duplicate_rows_removed"] == 1
     assert metadata["statistics"]["duplicate_addresses_removed"] == 0
     assert metadata["statistics"]["invalid_pincodes"] == 1
-    assert metadata["statistics"]["invalid_addresses_removed"] == 1
-    assert (processed_dir / "final_clean_dataset.csv").exists()
+    assert (processed_dir / "cleaned_dataset.csv").exists()
     assert (reports_dir / "preprocessing_report.json").exists()
 
-    cleaned = pd.read_csv(processed_dir / "final_clean_dataset.csv", dtype=str)
-    assert len(cleaned.index) == 1
+    cleaned = pd.read_csv(processed_dir / "cleaned_dataset.csv", dtype=str)
+    assert len(cleaned.index) == 2
     assert "full_address" in cleaned.columns
-    assert "searchable_text" in cleaned.columns
     assert "address_hash" in cleaned.columns
     assert "quality_score" in cleaned.columns
-    assert cleaned["address_hash"].is_unique
     assert "Maharashtra" in cleaned.loc[0, "full_address"]
-    assert "tcs" in cleaned.loc[0, "searchable_text"]

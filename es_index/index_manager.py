@@ -2,51 +2,98 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from elasticsearch import Elasticsearch
 from loguru import logger
 
+from utils.constants import PROJECT_ROOT
+
+
+def _resolve_synonyms_path(config: dict[str, Any]) -> Path:
+    analysis = config.get("analysis", {})
+    synonyms_file = analysis.get("synonyms_file", "datasets/dictionaries/address_synonyms.txt")
+    path = Path(synonyms_file)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    return path
+
+
+def _load_synonym_rules(config: dict[str, Any]) -> list[str]:
+    """Load synonym rules from file for inline ES synonym filter."""
+    synonyms_path = _resolve_synonyms_path(config)
+    if not synonyms_path.exists():
+        return []
+
+    rules: list[str] = []
+    for line in synonyms_path.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if not text or text.startswith("#"):
+            continue
+        rules.append(text.replace("\t", ", "))
+    return rules
+
 
 def build_index_settings(config: dict[str, Any]) -> dict[str, Any]:
     """Return index settings including custom analyzers for Indian addresses."""
     index_config = config.get("index", {})
+    analysis_config = config.get("analysis", {})
+    synonym_rules = _load_synonym_rules(config)
+
+    filters: dict[str, Any] = {
+        "address_edge_ngram": {
+            "type": "edge_ngram",
+            "min_gram": int(analysis_config.get("edge_ngram_min", 2)),
+            "max_gram": int(analysis_config.get("edge_ngram_max", 20)),
+        },
+        "address_word_delimiter": {
+            "type": "word_delimiter_graph",
+            "generate_word_parts": True,
+            "split_on_case_change": True,
+        },
+    }
+
+    if synonym_rules:
+        filters["address_synonyms"] = {
+            "type": "synonym",
+            "synonyms": synonym_rules,
+            "expand": True,
+            "lenient": True,
+        }
+
+    analyzers: dict[str, Any] = {
+        "address_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": _filter_chain(["lowercase", "asciifolding", "address_synonyms", "address_word_delimiter"], filters),
+        },
+        "autocomplete_index": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": _filter_chain(["lowercase", "asciifolding", "address_synonyms", "address_edge_ngram"], filters),
+        },
+        "autocomplete_search": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": _filter_chain(["lowercase", "asciifolding", "address_synonyms"], filters),
+        },
+    }
+
     return {
         "number_of_shards": index_config.get("number_of_shards", 3),
         "number_of_replicas": index_config.get("number_of_replicas", 0),
         "refresh_interval": index_config.get("refresh_interval", "30s"),
         "analysis": {
-            "filter": {
-                "address_edge_ngram": {
-                    "type": "edge_ngram",
-                    "min_gram": 2,
-                    "max_gram": 20,
-                },
-                "address_word_delimiter": {
-                    "type": "word_delimiter_graph",
-                    "generate_word_parts": True,
-                    "split_on_case_change": True,
-                },
-            },
-            "analyzer": {
-                "address_analyzer": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "filter": ["lowercase", "asciifolding", "address_word_delimiter"],
-                },
-                "autocomplete_index": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "filter": ["lowercase", "asciifolding", "address_edge_ngram"],
-                },
-                "autocomplete_search": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "filter": ["lowercase", "asciifolding"],
-                },
-            },
+            "filter": filters,
+            "analyzer": analyzers,
         },
     }
+
+
+def _filter_chain(names: list[str], available_filters: dict[str, Any]) -> list[str]:
+    """Include only filters that were actually registered."""
+    return [name for name in names if name in ("lowercase", "asciifolding") or name in available_filters]
 
 
 def build_index_mappings() -> dict[str, Any]:

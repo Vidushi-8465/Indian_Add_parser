@@ -11,7 +11,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOG_DIR = PROJECT_ROOT / "logs"
 
 _CONFIGURED = False
-_PREPROCESSING_LOG_CONFIGURED = False
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -41,24 +40,6 @@ def setup_logging(log_level: str = "INFO") -> None:
         format="{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {extra[module]} - {message}",
     )
     _CONFIGURED = True
-
-
-def setup_preprocessing_logging(log_path: Path, log_level: str = "INFO") -> None:
-    """Add a dedicated preprocessing log file."""
-    global _PREPROCESSING_LOG_CONFIGURED
-    if _PREPROCESSING_LOG_CONFIGURED:
-        return
-
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    logger.add(
-        log_path,
-        level=log_level,
-        rotation="10 MB",
-        enqueue=False,
-        filter=lambda record: record["extra"].get("module", "").startswith("preprocessing"),
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {extra[module]} - {message}",
-    )
-    _PREPROCESSING_LOG_CONFIGURED = True
 
 
 def get_logger(module: str):

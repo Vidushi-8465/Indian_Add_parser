@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 from rapidfuzz import fuzz
 
-from utils.string_utils import coerce_identifier_string, is_subdistrict_column, normalize_column_name
+from utils.string_utils import is_subdistrict_column, normalize_column_name
 
 FUZZY_MATCH_THRESHOLD = 88
 
@@ -172,7 +172,21 @@ class SchemaStandardizer:
 
     @staticmethod
     def _to_nullable_string(value: object) -> object:
-        return coerce_identifier_string(value)
+        if pd.isna(value):
+            return pd.NA
+
+        text = str(value).strip()
+        if not text:
+            return pd.NA
+        if text.lower() in {"nan", "none", "null", "na", "n/a", "-", "--"}:
+            return pd.NA
+
+        text = " ".join(text.split())
+        if text.endswith(".0"):
+            digits = text[:-2]
+            if digits.isdigit():
+                return digits
+        return text
 
 
 class DatasetMerger:

@@ -1,0 +1,34 @@
+rd, road
+st, street
+str, street
+dr, drive
+ave, avenue
+blvd, boulevard
+ln, lane
+ext, extension
+extn, extension
+ngr, nagar
+ng, nagar
+col, colony
+sec, sector
+dist, district
+opp, opposite
+nr, near
+po, post office
+bo, branch office
+so, sub office
+ho, head office
+apt, apartment
+bldg, building
+bh, bungalow
+ch, chowk
+mkt, market
+twp, township
+vlg, village
+gp, gram panchayat
+mah, maharashtra
+mh, maharashtra
+tn, tamil nadu
+ka, karnataka
+dl, delhi
+up, uttar pradesh

@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app_logging.logger import setup_logging
-from es_index.client import build_elasticsearch_client, ping_cluster
+from es_index.client import build_elasticsearch_client, test_connection
 from es_index.index_manager import IndexManager
 from utils.constants import DEFAULT_ELASTICSEARCH_CONFIG
 from utils.file_utils import load_yaml_config
@@ -39,7 +39,7 @@ def main() -> int:
     config = load_yaml_config(args.config)
     client = build_elasticsearch_client(config)
 
-    if not ping_cluster(client):
+    if not test_connection(client=client, config=config)["connected"]:
         print("ERROR: Elasticsearch is not reachable at configured host.", flush=True)
         return 1
 

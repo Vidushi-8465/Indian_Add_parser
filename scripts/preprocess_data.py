@@ -41,11 +41,8 @@ def main() -> int:
     print(f"Duplicate addresses removed: {stats['duplicate_addresses_removed']}")
     print(f"Empty rows removed: {stats['empty_rows_removed']}")
     print(f"Invalid pincodes: {stats['invalid_pincodes']}")
-    print(f"Invalid addresses removed: {stats['invalid_addresses_removed']}")
-    print(f"Duplicate hashes removed: {stats['duplicate_hashes_removed']}")
     print(f"Output: {metadata['output_dataset']}")
     print(f"Report: {metadata['preprocessing_report']}")
-    print(f"Log: {metadata['preprocessing_log']}")
     return 0
 
 

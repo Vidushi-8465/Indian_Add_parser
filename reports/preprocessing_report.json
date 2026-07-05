@@ -1,13 +1,13 @@
 {
   "report_type": "preprocessing",
-  "generated_at": "2026-07-03T11:45:46.927696+00:00",
+  "generated_at": "2026-07-05T17:23:06.866190+00:00",
   "pipeline": {
     "pipeline": "preprocessing",
     "version": "1.1",
     "config_path": "configs\\preprocessing.yaml",
-    "started_at": "2026-07-03T11:20:03.567614+00:00",
-    "completed_at": "2026-07-03T11:45:46.920548+00:00",
-    "processing_time_seconds": 1543.352,
+    "started_at": "2026-07-05T16:40:14.695873+00:00",
+    "completed_at": "2026-07-05T17:23:06.857173+00:00",
+    "processing_time_seconds": 2572.348,
     "input_dataset": "datasets\\master\\master_dataset.csv",
     "output_dataset": "datasets\\processed\\cleaned_dataset.csv",
     "preprocessing_report": "reports\\preprocessing_report.json",

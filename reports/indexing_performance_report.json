@@ -1,0 +1,68 @@
+{
+  "report_type": "indexing_performance",
+  "generated_at": "2026-07-06T04:42:45.011089+00:00",
+  "metrics": {
+    "elapsed_seconds": 328.061,
+    "documents_per_second": 5844.12,
+    "rows_read": 1930241,
+    "documents_mapped": 1917234,
+    "documents_skipped": 13007,
+    "indexed": 1917228,
+    "failed": 6,
+    "batches": 959,
+    "retries": 12,
+    "chunks_processed": 97,
+    "index_document_count": 1917228,
+    "store_size_bytes": 1686611008
+  },
+  "pipeline": {
+    "pipeline": "elasticsearch_indexing",
+    "version": "1.0",
+    "config_path": "configs\\elasticsearch.yaml",
+    "started_at": "2026-07-06T04:37:16.950190+00:00",
+    "completed_at": "2026-07-06T04:42:45.010778+00:00",
+    "index": "indian_addresses",
+    "input_dataset": "datasets\\processed\\cleaned_dataset.csv",
+    "index_created": false,
+    "statistics": {
+      "rows_read": 1930241,
+      "documents_mapped": 1917234,
+      "documents_skipped": 13007,
+      "indexed": 1917228,
+      "failed": 6,
+      "batches": 959,
+      "retries": 12,
+      "chunks_processed": 97,
+      "elapsed_seconds": 328.061,
+      "errors": [
+        "{'index': {'_index': 'indian_addresses', '_id': '5a47985eeb047c3390aa28a3265169a004bbe0bc26600d0f62b9638c4b422e94', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=13,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '5a47985eeb047c3390aa28a3265169a004bbe0bc26600d0f62b9638c4b422e94', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=13,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '5a47985eeb047c3390aa28a3265169a004bbe0bc26600d0f62b9638c4b422e94', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=13,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '048aa0e38a4b7af63ed1dd276e40ee335dc69a47940fca6621253540e4cae776', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=16,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '048aa0e38a4b7af63ed1dd276e40ee335dc69a47940fca6621253540e4cae776', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=16,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '048aa0e38a4b7af63ed1dd276e40ee335dc69a47940fca6621253540e4cae776', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=16,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': 'a3dfb2d01ca13c0a732d7e910c1cec4c9a70eac969a6d5cc962cc620bc9897bb', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=13,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': 'a3dfb2d01ca13c0a732d7e910c1cec4c9a70eac969a6d5cc962cc620bc9897bb', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=13,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': 'a3dfb2d01ca13c0a732d7e910c1cec4c9a70eac969a6d5cc962cc620bc9897bb', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=13,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': 'a946e082596f65f07e6978acde80ba8137bd89c1ce40bf634d873e7eae33c507', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=16,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': 'a946e082596f65f07e6978acde80ba8137bd89c1ce40bf634d873e7eae33c507', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=16,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': 'a946e082596f65f07e6978acde80ba8137bd89c1ce40bf634d873e7eae33c507', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=16,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '99bbe8b425b5867896a04342bf9feac9c13ebc2a78040fc345e16ec7cdcf9551', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=13,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '99bbe8b425b5867896a04342bf9feac9c13ebc2a78040fc345e16ec7cdcf9551', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=13,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '99bbe8b425b5867896a04342bf9feac9c13ebc2a78040fc345e16ec7cdcf9551', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=13,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '06c83dadd6d3e4e3bc281dc1ecffacfb9c9de5a9f620a830b9b7a1d51687ee54', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=16,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '06c83dadd6d3e4e3bc281dc1ecffacfb9c9de5a9f620a830b9b7a1d51687ee54', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=16,lastStartOffset=9 for field 'full_address'\"}}}",
+        "{'index': {'_index': 'indian_addresses', '_id': '06c83dadd6d3e4e3bc281dc1ecffacfb9c9de5a9f620a830b9b7a1d51687ee54', 'status': 400, 'error': {'type': 'illegal_argument_exception', 'reason': \"startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards startOffset=3,endOffset=16,lastStartOffset=9 for field 'full_address'\"}}}"
+      ]
+    },
+    "index_stats": {
+      "exists": true,
+      "index": "indian_addresses",
+      "document_count": 1917228,
+      "deleted_count": 18774,
+      "store_size_bytes": 1686611008
+    },
+    "indexing_report": "reports\\indexing_report.json",
+    "performance_report": "reports\\indexing_performance_report.json"
+  }
+}

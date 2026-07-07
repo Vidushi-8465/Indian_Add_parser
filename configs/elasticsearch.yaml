@@ -34,6 +34,7 @@ indexing:
 search:
   default_size: 20
   max_size: 100
+  top_n: 100
   fuzzy_fuzziness: AUTO
   phrase_slop: 2
   autocomplete_min_chars: 2

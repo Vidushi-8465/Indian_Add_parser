@@ -73,10 +73,15 @@ def test_query_builder_exact_fuzzy_phrase_autocomplete(es_config: dict) -> None:
     phrase = builder.build_search_body("phrase", query="Rajiv Gandhi Infotech Park", size=5)
     autocomplete = builder.build_search_body("autocomplete", query="Hinj", size=5)
 
-    assert exact["query"]["function_score"]["query"]["bool"]["must"]
-    assert fuzzy["query"]["function_score"]["query"]["bool"]["must"][0]["multi_match"]["fuzziness"] == "AUTO"
-    assert phrase["query"]["function_score"]["query"]["bool"]["must"][0]["match_phrase"]["full_address"]["query"]
-    assert autocomplete["query"]["function_score"]["query"]["bool"]["must"][0]["multi_match"]["type"] == "bool_prefix"
+    exact_should = exact["query"]["function_score"]["query"]["bool"]["should"]
+    fuzzy_should = fuzzy["query"]["function_score"]["query"]["bool"]["should"]
+    phrase_should = phrase["query"]["function_score"]["query"]["bool"]["should"]
+    autocomplete_should = autocomplete["query"]["function_score"]["query"]["bool"]["should"]
+
+    assert any("searchable_text" in clause.get("multi_match", {}).get("fields", []) for clause in exact_should)
+    assert any(clause.get("multi_match", {}).get("fuzziness") == "AUTO" for clause in fuzzy_should)
+    assert any("searchable_text" in clause.get("match_phrase", {}) for clause in phrase_should)
+    assert any(clause.get("multi_match", {}).get("type") == "bool_prefix" for clause in autocomplete_should)
 
 
 def test_query_builder_hierarchical_admin_filters(es_config: dict) -> None:
@@ -93,8 +98,10 @@ def test_query_builder_hierarchical_admin_filters(es_config: dict) -> None:
             "building": "TCS",
         },
     )
-    filters = body["query"]["function_score"]["query"]["bool"]["filter"]
-    assert any("state_name.keyword" in clause.get("term", {}) for clause in filters)
+    should = body["query"]["function_score"]["query"]["bool"]["should"]
+    assert body["query"]["function_score"]["query"]["bool"]["minimum_should_match"] == 1
+    assert any("city_name^8" in clause.get("multi_match", {}).get("fields", []) for clause in should)
+    assert any("building_name" in clause.get("match_phrase", {}) for clause in should)
 
 
 def test_query_builder_hierarchical_pincode_filters(es_config: dict) -> None:
@@ -105,8 +112,17 @@ def test_query_builder_hierarchical_pincode_filters(es_config: dict) -> None:
         size=10,
         filters={"pincode": "411057", "city": "Pune", "state": "Maharashtra"},
     )
-    filters = body["query"]["function_score"]["query"]["bool"]["filter"]
-    assert any("pincode" in clause for clause in filters)
+    should = body["query"]["function_score"]["query"]["bool"]["should"]
+    assert any(clause.get("term", {}).get("pincode", {}).get("value") == "411057" for clause in should)
+
+
+def test_query_builder_auto_searches_searchable_text_and_boosts_city(es_config: dict) -> None:
+    builder = QueryBuilder(es_config)
+    body = builder.build_search_body("auto", query="Mumbai", size=10)
+
+    should = body["query"]["function_score"]["query"]["bool"]["should"]
+    assert any("searchable_text^12" in clause.get("multi_match", {}).get("fields", []) for clause in should)
+    assert any("city_name^6" in clause.get("multi_match", {}).get("fields", []) for clause in should)
 
 
 def test_query_builder_geospatial_includes_geo_distance(es_config: dict) -> None:

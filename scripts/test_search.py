@@ -24,7 +24,7 @@ while True:
         break
 
     body = {
-        "size": 5,
+        "size": 15,
         "query": {
             "multi_match": {
                 "query": q,

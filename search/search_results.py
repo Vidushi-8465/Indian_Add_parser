@@ -106,6 +106,7 @@ class SearchResult:
     normalized_query: str
     intent: str
     parsed_entities: SearchEntities
+    retrieved_candidates: list[SearchCandidate] = field(default_factory=list)
     results: list[SearchCandidate] = field(default_factory=list)
     execution_time_ms: int = 0
     total_hits: int = 0
@@ -113,6 +114,7 @@ class SearchResult:
     validation_errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        retrieved_items = [candidate.to_dict() for candidate in self.retrieved_candidates]
         result_items = [candidate.to_dict() for candidate in self.results]
         return {
             "query": self.query,
@@ -120,6 +122,7 @@ class SearchResult:
             "intent": self.intent,
             "strategy": self.strategy,
             "parsed_entities": self.parsed_entities.to_dict(),
+            "retrieved_candidates": retrieved_items,
             "results": result_items,
             "candidates": result_items,
             "execution_time_ms": self.execution_time_ms,

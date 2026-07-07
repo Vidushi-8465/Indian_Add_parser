@@ -16,7 +16,8 @@ from .query_normalizer import QueryNormalizer
 from .query_parser import QueryParser
 from .reranker import ResultReranker
 from .search_results import SearchAnalysis, SearchCandidate, SearchEntities, SearchResult
-
+from app_logging.logger import setup_logging
+from es_index.client import build_elasticsearch_client, test_connection
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class SearchService:
         search_config = config.get("search", {})
         self.default_size = int(search_config.get("default_size", 20))
         self.max_size = int(search_config.get("max_size", 100))
-        self.top_n = int(search_config.get("top_n", self.max_size))
+        self.top_n = min(int(search_config.get("top_n", 100)), self.max_size)
         self.geo_default_distance = search_config.get("geo_default_distance", "5km")
 
     def analyze_query(self, query: str | None) -> SearchAnalysis:
@@ -164,7 +165,7 @@ class SearchService:
             distance=distance,
         )
 
-        response = self.client.search(index=self.index_name, body=plan.query_body)
+        response = self.client.search(index=self.index_name, body=self._with_retrieval_size(plan.query_body))
         raw_hits = response.get("hits", {}).get("hits", [])
         total_hits = response.get("hits", {}).get("total", {})
         if isinstance(total_hits, dict):
@@ -172,16 +173,18 @@ class SearchService:
         else:
             total_count = int(total_hits or len(raw_hits))
 
-        candidates = [SearchCandidate.from_hit(hit) for hit in raw_hits[: self.top_n]]
+        candidates = self._retrieve_candidates(raw_hits)
         ranked = self.reranker.rerank(plan.analysis.normalized_query or query, plan.analysis.parsed_entities, candidates)
         execution_time_ms = int((perf_counter() - start_time) * 1000)
+        final_results = ranked[: plan.size]
 
         result = SearchResult(
             query=query,
             normalized_query=plan.analysis.normalized_query,
             intent=plan.analysis.intent,
             parsed_entities=plan.analysis.parsed_entities,
-            results=ranked,
+            retrieved_candidates=candidates,
+            results=final_results,
             execution_time_ms=execution_time_ms,
             total_hits=total_count,
             strategy=plan.strategy,
@@ -213,6 +216,66 @@ class SearchService:
             "size": plan.size,
             "query_body": plan.query_body,
         }
+
+    def retrieve_candidates(
+        self,
+        query: str | None = None,
+        strategy: str = "auto",
+        size: int | None = None,
+        state: str | None = None,
+        district: str | None = None,
+        city: str | None = None,
+        locality: str | None = None,
+        building: str | None = None,
+        pincode: str | None = None,
+        lat: float | None = None,
+        lon: float | None = None,
+        distance: str | None = None,
+    ) -> dict[str, Any]:
+        """Return the raw ES candidate pool before reranking."""
+        if self.client is None:
+            raise RuntimeError("SearchService.retrieve_candidates requires an Elasticsearch client.")
+
+        plan = self.build_search_plan(
+            query=query,
+            strategy=strategy,
+            size=size,
+            state=state,
+            district=district,
+            city=city,
+            locality=locality,
+            building=building,
+            pincode=pincode,
+            lat=lat,
+            lon=lon,
+            distance=distance,
+        )
+        response = self.client.search(index=self.index_name, body=self._with_retrieval_size(plan.query_body))
+        raw_hits = response.get("hits", {}).get("hits", [])
+        total_hits = response.get("hits", {}).get("total", {})
+        if isinstance(total_hits, dict):
+            total_count = int(total_hits.get("value", len(raw_hits)))
+        else:
+            total_count = int(total_hits or len(raw_hits))
+
+        candidates = self._retrieve_candidates(raw_hits)
+        return {
+            "query": query,
+            "strategy": plan.strategy,
+            "total_hits": total_count,
+            "retrieval_size": self.top_n,
+            "candidates": [candidate.to_dict() for candidate in candidates],
+            "query_body": plan.query_body,
+        }
+
+    def _with_retrieval_size(self, body: dict[str, Any]) -> dict[str, Any]:
+        retrieval_body = dict(body)
+        retrieval_body["size"] = self.top_n
+        return retrieval_body
+
+    @staticmethod
+    def _retrieve_candidates(raw_hits: list[dict[str, Any]]) -> list[SearchCandidate]:
+        return [SearchCandidate.from_hit(hit) for hit in raw_hits]
 
     @staticmethod
     def _merge_entities(entities: SearchEntities) -> SearchEntities:
@@ -277,26 +340,67 @@ def _load_json_config(config_path: str | Path) -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Inspect the address search pipeline.")
-    parser.add_argument("--config", default=Path(__file__).resolve().parents[1] / "configs" / "elasticsearch.yaml", help="Path to the Elasticsearch YAML config.")
-    parser.add_argument("--query", required=True, help="Raw address query to analyze.")
-    parser.add_argument("--strategy", default="auto", help="Search strategy to use.")
-    parser.add_argument("--size", type=int, default=20, help="Number of candidates to request.")
-    parser.add_argument("--state", default=None)
-    parser.add_argument("--district", default=None)
-    parser.add_argument("--city", default=None)
-    parser.add_argument("--locality", default=None)
-    parser.add_argument("--building", default=None)
-    parser.add_argument("--pincode", default=None)
-    parser.add_argument("--lat", type=float, default=None)
-    parser.add_argument("--lon", type=float, default=None)
-    parser.add_argument("--distance", default=None)
-    parser.add_argument("--dry-run", action="store_true", help="Print the generated analysis and query body without calling Elasticsearch.")
+    parser = argparse.ArgumentParser(description="Indian Address Search")
+
+    parser.add_argument(
+        "--config",
+        default=Path(__file__).resolve().parents[1] / "configs" / "elasticsearch.yaml",
+    )
+
+    parser.add_argument("--query", required=True)
+    parser.add_argument("--strategy", default="auto")
+    parser.add_argument("--size", type=int, default=20)
+
+    parser.add_argument("--state")
+    parser.add_argument("--district")
+    parser.add_argument("--city")
+    parser.add_argument("--locality")
+    parser.add_argument("--building")
+    parser.add_argument("--pincode")
+
+    parser.add_argument("--lat", type=float)
+    parser.add_argument("--lon", type=float)
+    parser.add_argument("--distance")
+
+    parser.add_argument("--dry-run", action="store_true")
+
     args = parser.parse_args()
 
+    setup_logging()
+
     config = _load_json_config(args.config)
-    service = SearchService(client=None, config=config)
-    preview = service.preview(
+
+    if args.dry_run:
+        service = SearchService(client=None, config=config)
+
+        preview = service.preview(
+            query=args.query,
+            strategy=args.strategy,
+            size=args.size,
+            state=args.state,
+            district=args.district,
+            city=args.city,
+            locality=args.locality,
+            building=args.building,
+            pincode=args.pincode,
+            lat=args.lat,
+            lon=args.lon,
+            distance=args.distance,
+        )
+
+        print(json.dumps(preview, indent=2, ensure_ascii=False))
+        return
+
+    client = build_elasticsearch_client(config)
+
+    status = test_connection(client, config)
+
+    if not status["connected"]:
+        raise RuntimeError("Could not connect to Elasticsearch.")
+
+    service = SearchService(client=client, config=config)
+
+    result = service.search(
         query=args.query,
         strategy=args.strategy,
         size=args.size,
@@ -311,12 +415,7 @@ def main() -> None:
         distance=args.distance,
     )
 
-    if args.dry_run:
-        print(json.dumps(preview, indent=2, ensure_ascii=False))
-        return
-
-    raise RuntimeError("Use --dry-run for offline inspection, or wire an Elasticsearch client before calling SearchService.search().")
-
+    print(json.dumps(result, indent=2, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()

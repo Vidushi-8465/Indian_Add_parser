@@ -78,9 +78,12 @@ def test_search_service_returns_preview_and_reranks_hits() -> None:
     service = SearchService(client, config)
     preview = service.preview(query="Lotus Heights Baner Pune 411045")
     assert preview["analysis"]["intent"] == "FULL_ADDRESS_SEARCH"
+    assert preview["size"] == 20
 
     result = service.search(query="Lotus Heights Baner Pune 411045")
     assert result["total_hits"] == 1
     assert result["results"][0]["building_name"] == "Lotus Heights"
     assert result["results"][0]["confidence"] > 0
+    assert result["retrieved_candidates"][0]["building_name"] == "Lotus Heights"
     client.search.assert_called_once()
+    assert client.search.call_args.kwargs["body"]["size"] == 100

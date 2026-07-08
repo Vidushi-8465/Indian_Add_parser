@@ -78,7 +78,10 @@ def test_query_builder_exact_fuzzy_phrase_autocomplete(es_config: dict) -> None:
     phrase_should = phrase["query"]["function_score"]["query"]["bool"]["should"]
     autocomplete_should = autocomplete["query"]["function_score"]["query"]["bool"]["should"]
 
-    assert any("searchable_text" in clause.get("multi_match", {}).get("fields", []) for clause in exact_should)
+    assert any(
+        any(field.startswith("searchable_text") for field in clause.get("multi_match", {}).get("fields", []))
+        for clause in exact_should
+    )
     assert any(clause.get("multi_match", {}).get("fuzziness") == "AUTO" for clause in fuzzy_should)
     assert any("searchable_text" in clause.get("match_phrase", {}) for clause in phrase_should)
     assert any(clause.get("multi_match", {}).get("type") == "bool_prefix" for clause in autocomplete_should)
@@ -192,8 +195,7 @@ def test_search_service_returns_candidates(es_config: dict) -> None:
     }
 
     service = SearchService(client, es_config)
-    with patch.object(service.search_logger, "log_search"):
-        result = service.search(query="TCS Hinjewadi", strategy="fuzzy", size=5)
+    result = service.search(query="TCS Hinjewadi", strategy="fuzzy", size=5)
 
     assert result["strategy"] == "fuzzy"
     assert result["total_hits"] == 1

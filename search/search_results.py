@@ -129,6 +129,7 @@ class SearchResult:
             "retrieved_candidates": retrieved_items,
             "results": result_items,
             "candidates": result_items,
+            "took_ms": self.execution_time_ms,
             "execution_time_ms": self.execution_time_ms,
             "total_hits": self.total_hits,
             "validation_errors": list(self.validation_errors),

@@ -103,3 +103,32 @@ Precision@10
 Recall@100
 Top-1 Accuracy
 Top-5 Accuracy
+
+## Commands to run
+
+```powershell
+cd c:\Vidushi\Indian_Add_Geo
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+```powershell
+# Validate the search + reranking flow
+python -m pytest tests\test_search.py -v
+
+# Validate Elasticsearch integration used by the search service
+python -m pytest tests\test_elasticsearch.py tests\test_api.py -v
+```
+
+```powershell
+# Dry-run the ML search pipeline without hitting Elasticsearch
+python search\search_service.py --query "MG Road Pune" --dry-run
+
+# Run a live search once Elasticsearch is available
+python search\search_service.py --query "MG Road Pune" --size 20
+```
+
+```powershell
+# Point inference at a trained ranking model when you have one
+$env:RANKING_MODEL_PATH = "c:\Vidushi\Indian_Add_Geo\models\ranking_model.json"
+```

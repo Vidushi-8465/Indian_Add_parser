@@ -15,9 +15,9 @@ _PINCODE_PATTERN = re.compile(r"^[1-9][0-9]{5}$")
 class EntityDetector:
     """Extract likely address entities from normalized query tokens."""
 
-    BUILDING_MARKERS = {"flat", "house", "plot", "shop", "apartment", "tower", "wing"}
-    ROAD_MARKERS = {"road", "street", "lane", "rd", "st", "avenue", "ave"}
-    LOCALITY_MARKERS = {"sector", "layout", "colony", "nagar", "phase", "block"}
+    BUILDING_MARKERS = {"flat", "house", "building", "plot", "shop", "apartment", "tower", "wing"}
+    ROAD_MARKERS = {"road", "street", "lane", "rd", "st", "avenue", "ave", "road no", "street no"}
+    LOCALITY_MARKERS = {"sector", "layout", "colony", "nagar", "phase", "block", "society", "area", "enclave", "complex", "vihar"}
     VILLAGE_MARKERS = {"village", "vill", "gram"}
     BLOCK_MARKERS = {"block"}
     TALUKA_MARKERS = {"taluka", "tehsil", "tal"}
@@ -85,11 +85,22 @@ class EntityDetector:
         for index, token in enumerate(tokens):
             if token not in self.ROAD_MARKERS:
                 continue
-            start = max(0, index - 2)
+            start = max(0, index - 3)
             captured = tokens[start : index + 1]
             if len(captured) == 1 and index > 0:
                 captured.insert(0, tokens[index - 1])
             return " ".join(captured).title()
+        return None
+
+    def _detect_flat_number(self, tokens: list[str]) -> str | None:
+        for index, token in enumerate(tokens):
+            if token == "flat" and index + 1 < len(tokens) and tokens[index + 1].isdigit():
+                return tokens[index + 1]
+            if token == "house":
+                if index + 2 < len(tokens) and tokens[index + 1] == "number" and tokens[index + 2].isdigit():
+                    return tokens[index + 2]
+                if index + 1 < len(tokens) and tokens[index + 1].isdigit():
+                    return tokens[index + 1]
         return None
 
     def _split_remaining_tokens(self, tokens: list[str], entity: SearchEntities) -> tuple[str | None, str | None, str | None, str | None]:
@@ -111,19 +122,18 @@ class EntityDetector:
             filtered = [token for token in filtered if token not in road_tokens]
 
         building_name = None
-        flat_number = None
+        flat_number = self._detect_flat_number(tokens)
         locality = entity.locality
         city = entity.city
 
         marker_index = self._find_marker_index(tokens, self.BUILDING_MARKERS)
         if marker_index is not None:
-            if marker_index + 1 < len(tokens) and tokens[marker_index + 1].isdigit():
-                flat_number = tokens[marker_index + 1]
             tail = [token for token in tokens[marker_index + 1 :] if token != entity.pincode]
-            if flat_number and tail and tail[0] == flat_number:
-                tail = tail[1:]
+            if flat_number:
+                tail = [token for token in tail if token != flat_number]
             tail = [token for token in tail if token not in self.BUILDING_MARKERS]
             tail = [token for token in tail if token not in self.ROAD_MARKERS]
+            tail = [token for token in tail if token not in self.LOCALITY_MARKERS]
             if len(tail) >= 3:
                 building_name = " ".join(tail[:-2]).title() or None
                 locality = locality or tail[-2].title()
@@ -147,6 +157,11 @@ class EntityDetector:
             city = city or filtered[1].title()
         elif building_name is None and len(filtered) == 1:
             city = city or filtered[0].title()
+
+        if locality is None and len(filtered) >= 2:
+            locality = filtered[-2].title()
+        if city is None and filtered:
+            city = filtered[-1].title()
 
         return building_name, flat_number, locality, city
 

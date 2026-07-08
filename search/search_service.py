@@ -40,6 +40,14 @@ class SearchService:
         "fuzzy",
         "phrase",
         "autocomplete",
+        "city",
+        "locality",
+        "district",
+        "state",
+        "building",
+        "road",
+        "full_address",
+        "pincode",
         "hierarchical_admin",
         "hierarchical_pincode",
         "geospatial",
@@ -58,7 +66,7 @@ class SearchService:
         search_config = config.get("search", {})
         self.default_size = int(search_config.get("default_size", 20))
         self.max_size = int(search_config.get("max_size", 100))
-        self.top_n = min(int(search_config.get("top_n", 100)), self.max_size)
+        self.top_n = int(search_config.get("top_n", 100))
         self.geo_default_distance = search_config.get("geo_default_distance", "5km")
 
     def analyze_query(self, query: str | None) -> SearchAnalysis:
@@ -100,6 +108,7 @@ class SearchService:
             state=state or analysis.parsed_entities.state,
         )
         result_size = min(size or self.default_size, self.max_size)
+        retrieval_size = self.top_n
         filters = self._build_filters(
             analysis.parsed_entities,
             state=state,
@@ -117,7 +126,7 @@ class SearchService:
         query_body = self.query_builder.build_search_body(
             strategy=resolved_strategy,
             query=analysis.normalized_query or query,
-            size=result_size,
+            size=retrieval_size,
             filters=filters,
             geo=geo,
             parsed_entities=analysis.parsed_entities.to_dict(),
@@ -165,7 +174,7 @@ class SearchService:
             distance=distance,
         )
 
-        response = self.client.search(index=self.index_name, body=self._with_retrieval_size(plan.query_body))
+        response = self.client.search(index=self.index_name, body=plan.query_body)
         raw_hits = response.get("hits", {}).get("hits", [])
         total_hits = response.get("hits", {}).get("total", {})
         if isinstance(total_hits, dict):
@@ -250,7 +259,7 @@ class SearchService:
             lon=lon,
             distance=distance,
         )
-        response = self.client.search(index=self.index_name, body=self._with_retrieval_size(plan.query_body))
+        response = self.client.search(index=self.index_name, body=plan.query_body)
         raw_hits = response.get("hits", {}).get("hits", [])
         total_hits = response.get("hits", {}).get("total", {})
         if isinstance(total_hits, dict):
@@ -267,11 +276,6 @@ class SearchService:
             "candidates": [candidate.to_dict() for candidate in candidates],
             "query_body": plan.query_body,
         }
-
-    def _with_retrieval_size(self, body: dict[str, Any]) -> dict[str, Any]:
-        retrieval_body = dict(body)
-        retrieval_body["size"] = self.top_n
-        return retrieval_body
 
     @staticmethod
     def _retrieve_candidates(raw_hits: list[dict[str, Any]]) -> list[SearchCandidate]:
@@ -314,15 +318,25 @@ class SearchService:
         if lat is not None and lon is not None:
             return "geospatial"
         if pincode:
-            return "hierarchical_pincode"
-        if state:
-            return "hierarchical_admin"
+            return "pincode"
         if intent == "PINCODE_SEARCH":
-            return "hierarchical_pincode"
-        if intent in {"STATE_SEARCH", "DISTRICT_SEARCH", "CITY_SEARCH", "LOCALITY_SEARCH", "BUILDING_SEARCH", "ROAD_SEARCH", "VILLAGE_SEARCH", "BLOCK_SEARCH"}:
-            return "hierarchical_admin"
+            return "pincode"
+        if intent == "CITY_SEARCH":
+            return "city"
+        if intent == "LOCALITY_SEARCH":
+            return "locality"
+        if intent == "DISTRICT_SEARCH":
+            return "district"
+        if intent == "STATE_SEARCH":
+            return "state"
+        if intent == "BUILDING_SEARCH":
+            return "building"
+        if intent == "ROAD_SEARCH":
+            return "road"
         if intent == "FULL_ADDRESS_SEARCH":
-            return "phrase"
+            return "full_address"
+        if state:
+            return "state"
         return "fuzzy"
 
 

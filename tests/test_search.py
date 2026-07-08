@@ -31,6 +31,7 @@ def test_entity_detector_extracts_core_fields() -> None:
     entities = detector.detect("Flat 302 Lotus Heights Baner Pune 411045", ["flat", "302", "lotus", "heights", "baner", "pune", "411045"])
     assert entities.pincode == "411045"
     assert entities.building_name == "Lotus Heights"
+    assert entities.flat_number == "302"
     assert entities.locality == "Baner"
     assert entities.city == "Pune"
 
@@ -46,6 +47,19 @@ def test_query_builder_builds_search_body() -> None:
     )
     assert body["size"] == 5
     assert body["query"]["function_score"]["query"]["bool"]["should"]
+
+
+def test_query_builder_uses_city_and_pincode_intents() -> None:
+    config = load_yaml_config(Path(__file__).resolve().parent.parent / "configs" / "elasticsearch.yaml")
+    builder = QueryBuilder(config)
+
+    city_body = builder.build_search_body("city", query="pune", size=5, parsed_entities={"city": "Pune"})
+    city_must = city_body["query"]["function_score"]["query"]["bool"]["must"]
+    assert any("multi_match" in clause for clause in city_must)
+
+    pincode_body = builder.build_search_body("pincode", query="411045", size=5, parsed_entities={"pincode": "411045"})
+    pincode_must = pincode_body["query"]["function_score"]["query"]["bool"]["must"]
+    assert any(clause.get("term", {}).get("pincode") == "411045" for clause in pincode_must)
 
 
 def test_search_service_returns_preview_and_reranks_hits() -> None:

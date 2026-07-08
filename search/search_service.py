@@ -62,7 +62,7 @@ class SearchService:
         self.normalizer = QueryNormalizer()
         self.parser = QueryParser(self.normalizer)
         self.entity_detector = EntityDetector(self.normalizer)
-        self.reranker = ResultReranker()
+        self.reranker = ResultReranker(config=config)
         search_config = config.get("search", {})
         self.default_size = int(search_config.get("default_size", 20))
         self.max_size = int(search_config.get("max_size", 100))

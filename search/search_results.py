@@ -32,6 +32,7 @@ class SearchEntities:
 class SearchCandidate:
     id: str | None = None
     score: float = 0.0
+    bm25_score: float = 0.0
     confidence: float = 0.0
     address_hash: str | None = None
     full_address: str | None = None
@@ -49,6 +50,8 @@ class SearchCandidate:
     location: dict[str, Any] | None = None
     quality_score: float | None = None
     source_file: str | None = None
+    es_rank: int | None = None
+    retrieval_position: int | None = None
 
     @classmethod
     def from_hit(cls, hit: dict[str, Any]) -> "SearchCandidate":
@@ -56,6 +59,7 @@ class SearchCandidate:
         return cls(
             id=hit.get("_id"),
             score=float(hit.get("_score") or 0.0),
+            bm25_score=float(hit.get("_score") or 0.0),
             address_hash=source.get("address_hash"),
             full_address=source.get("full_address"),
             building_name=source.get("building_name"),

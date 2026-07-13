@@ -1,0 +1,35 @@
+# Phase 9 — local end-to-end stack: Elasticsearch + API.
+# NOTE: when running via compose, set configs/elasticsearch.yaml ->
+#   connection.hosts: ["http://elasticsearch:9200"]
+# so the API container can reach the ES container by service name.
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  api:
+    build: .
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    # Mount source so config/data changes are picked up without a rebuild.
+    volumes:
+      - ./configs:/app/configs
+      - ./datasets:/app/datasets
+
+volumes:
+  es_data:

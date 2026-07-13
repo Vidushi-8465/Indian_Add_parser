@@ -35,6 +35,8 @@ class QueryParser:
     """Parse raw queries into tokens, phrases, and a coarse search intent."""
 
     BUILDING_MARKERS = {"flat", "house", "houseno", "housenumber", "plot", "shop", "apartment", "tower", "wing"}
+    OFFICE_MARKERS = {"office", "gpo", "headquarters", "hq", "bhavan", "bhawan", "sadan", "kendra", "karyalaya", "chamber", "chambers"}
+    LANDMARK_MARKERS = {"near", "opposite", "behind", "beside", "adjacent"}
     ROAD_MARKERS = {"road", "street", "lane", "rd", "st"}
     VILLAGE_MARKERS = {"village", "vill", "gram"}
     BLOCK_MARKERS = {"block"}
@@ -90,6 +92,10 @@ class QueryParser:
             return "PINCODE_SEARCH"
         if any(token in self.BUILDING_MARKERS for token in tokens) and (len(tokens) >= 4 or any(_PINCODE_PATTERN.fullmatch(token) for token in tokens)):
             return "FULL_ADDRESS_SEARCH"
+        if any(token in self.LANDMARK_MARKERS for token in tokens):
+            return "NEARBY_SEARCH"
+        if any(token in self.OFFICE_MARKERS for token in tokens):
+            return "OFFICE_SEARCH"
         if any(token in self.BLOCK_MARKERS for token in tokens):
             return "BLOCK_SEARCH"
         if any(token in self.VILLAGE_MARKERS for token in tokens):

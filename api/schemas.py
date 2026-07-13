@@ -13,6 +13,15 @@ SearchStrategy = Literal[
     "fuzzy",
     "phrase",
     "autocomplete",
+    "city",
+    "locality",
+    "district",
+    "state",
+    "building",
+    "office",
+    "road",
+    "full_address",
+    "pincode",
     "hierarchical_admin",
     "hierarchical_pincode",
     "geospatial",
@@ -37,6 +46,8 @@ class SearchRequest(BaseModel):
 class AddressCandidate(BaseModel):
     id: str | None = None
     score: float = 0.0
+    confidence: float = 0.0
+    bm25_score: float = 0.0
     address_hash: str | None = None
     full_address: str | None = None
     building_name: str | None = None

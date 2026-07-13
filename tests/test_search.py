@@ -36,6 +36,57 @@ def test_entity_detector_extracts_core_fields() -> None:
     assert entities.city == "Pune"
 
 
+def test_query_normalizer_corrects_spelling() -> None:
+    normalizer = QueryNormalizer()
+    assert normalizer.normalize_query("Banglore Maharastra") == "bangalore maharashtra"
+    assert normalizer.normalize_query("appartment nr park") == "apartment near park"
+
+
+def test_query_normalizer_number_helpers() -> None:
+    normalizer = QueryNormalizer()
+    assert normalizer.extract_numbers("flat 302 pune 411045") == ["302", "411045"]
+    assert normalizer.has_potential_pincode("baner pune 411045") is True
+    assert normalizer.has_potential_pincode("flat 302") is False
+
+
+def test_entity_detector_extracts_office_name() -> None:
+    detector = EntityDetector()
+    entities = detector.detect(
+        "Reliance Corporate Office Bandra Mumbai",
+        ["reliance", "corporate", "office", "bandra", "mumbai"],
+    )
+    assert entities.office_name == "Reliance Corporate Office"
+    assert entities.city == "Mumbai"
+
+
+def test_entity_detector_extracts_landmark() -> None:
+    detector = EntityDetector()
+    entities = detector.detect(
+        "near lotus temple delhi",
+        ["near", "lotus", "temple", "delhi"],
+    )
+    assert entities.landmark == "Lotus Temple"
+    assert entities.city == "Delhi"
+
+
+def test_query_parser_detects_office_and_nearby_intents() -> None:
+    parser = QueryParser()
+    assert parser.parse("Reliance Corporate Office Bandra Mumbai").intent == "OFFICE_SEARCH"
+    assert parser.parse("near lotus temple delhi").intent == "NEARBY_SEARCH"
+
+
+def test_retrieve_candidates_deduplicates_by_hash() -> None:
+    hits = [
+        {"_id": "1", "_score": 9.0, "_source": {"address_hash": "h1", "full_address": "A"}},
+        {"_id": "2", "_score": 8.0, "_source": {"address_hash": "h1", "full_address": "A"}},
+        {"_id": "3", "_score": 7.0, "_source": {"address_hash": "h2", "full_address": "B"}},
+    ]
+    candidates = SearchService._retrieve_candidates(hits)
+    assert [candidate.id for candidate in candidates] == ["1", "3"]
+    assert candidates[0].retrieval_position == 1
+    assert candidates[1].retrieval_position == 2
+
+
 def test_query_builder_builds_search_body() -> None:
     config = load_yaml_config(Path(__file__).resolve().parent.parent / "configs" / "elasticsearch.yaml")
     builder = QueryBuilder(config)

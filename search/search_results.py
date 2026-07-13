@@ -13,6 +13,8 @@ def _compact_mapping(values: dict[str, Any]) -> dict[str, Any]:
 @dataclass(slots=True)
 class SearchEntities:
     building_name: str | None = None
+    office_name: str | None = None
+    landmark: str | None = None
     flat_number: str | None = None
     road_name: str | None = None
     locality: str | None = None

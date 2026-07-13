@@ -50,6 +50,7 @@ class QueryBuilder:
             "district": self.build_district_query,
             "state": self.build_state_query,
             "building": self.build_building_query,
+            "office": self.build_office_query,
             "road": self.build_road_query,
             "full_address": self.build_full_address_query,
             "pincode": self.build_pincode_query,
@@ -218,6 +219,22 @@ class QueryBuilder:
         if query:
             must.append(self._multi_match_clause(query, ["building_name^5", "office_name^4", "road_name^3", "locality^2", "city_name^1.5", "district_name^1.25", "state_name^1", "full_address^2"]))
         must.extend(self._location_match_clauses(filters, include_building=True, include_road=True, include_locality=True, include_city=True, include_district=True, include_state=True))
+        return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
+
+    def build_office_query(
+        self,
+        query: str | None,
+        size: int,
+        filters: dict[str, str | None],
+        geo: dict[str, Any],
+        parsed_entities: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        must: list[dict[str, Any]] = []
+        should = self._boost_clauses(parsed_entities or {})
+        office_query = (parsed_entities or {}).get("office_name") or query
+        if office_query:
+            must.append(self._multi_match_clause(office_query, ["office_name^5", "building_name^3", "locality^2", "city_name^1.5", "district_name^1.25", "state_name^1", "full_address^2"]))
+        must.extend(self._location_match_clauses(filters, include_building=True, include_locality=True, include_city=True, include_district=True, include_state=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_road_query(
@@ -422,6 +439,10 @@ class QueryBuilder:
         clauses: list[dict[str, Any]] = []
         if parsed_entities.get("building_name"):
             clauses.append(self._multi_match_clause(parsed_entities["building_name"], ["building_name^5", "office_name^4", "full_address^2"], query_type="phrase"))
+        if parsed_entities.get("office_name"):
+            clauses.append(self._multi_match_clause(parsed_entities["office_name"], ["office_name^5", "building_name^3", "full_address^2"], query_type="phrase"))
+        if parsed_entities.get("landmark"):
+            clauses.append(self._multi_match_clause(parsed_entities["landmark"], ["full_address^2", "locality^1.5", "building_name^1.5"], query_type="phrase"))
         if parsed_entities.get("locality"):
             clauses.append(self._match_clause("locality", parsed_entities["locality"], boost=3))
         if parsed_entities.get("city"):

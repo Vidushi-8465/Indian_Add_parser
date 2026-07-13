@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from typing import Iterable
 
 from .query_normalizer import QueryNormalizer
@@ -10,6 +12,19 @@ from .search_results import SearchEntities
 
 
 _PINCODE_PATTERN = re.compile(r"^[1-9][0-9]{5}$")
+
+_DICTIONARY_DIR = Path(__file__).resolve().parents[1] / "datasets" / "dictionaries"
+
+
+def _load_dictionary(name: str) -> dict:
+    """Load a JSON dictionary, tolerating a missing or malformed file."""
+    path = _DICTIONARY_DIR / name
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 class EntityDetector:
@@ -23,8 +38,34 @@ class EntityDetector:
     TALUKA_MARKERS = {"taluka", "tehsil", "tal"}
     DISTRICT_MARKERS = {"district", "dist"}
 
+    # Fallbacks used when the dictionary files are missing or empty.
+    DEFAULT_OFFICE_MARKERS = {
+        "office", "gpo", "headquarters", "hq", "bhavan", "bhawan",
+        "sadan", "kendra", "karyalaya", "chamber", "chambers", "corporate",
+    }
+    DEFAULT_LANDMARK_PREPOSITIONS = {
+        "near", "opposite", "behind", "beside", "above", "below",
+        "adjacent", "front", "besides", "next",
+    }
+
     def __init__(self, normalizer: QueryNormalizer | None = None) -> None:
         self.normalizer = normalizer or QueryNormalizer()
+
+        building_dict = _load_dictionary("building_keywords.json")
+        landmark_dict = _load_dictionary("landmarks.json")
+
+        self.office_markers = {
+            marker.lower()
+            for marker in building_dict.get("office_types", [])
+        } or set(self.DEFAULT_OFFICE_MARKERS)
+        self.landmark_prepositions = {
+            preposition.lower()
+            for preposition in landmark_dict.get("prepositions", [])
+        } or set(self.DEFAULT_LANDMARK_PREPOSITIONS)
+        self.landmark_keywords = {
+            keyword.lower()
+            for keyword in landmark_dict.get("keywords", [])
+        }
 
     def detect(self, query: str | None, tokens: list[str]) -> SearchEntities:
         normalized_tokens = self.normalizer.normalize_tokens(tokens)
@@ -32,6 +73,8 @@ class EntityDetector:
 
         entity.pincode = self._detect_pincode(normalized_tokens)
         entity.state = self._detect_state(normalized_tokens)
+        entity.landmark = self._detect_landmark(normalized_tokens)
+        entity.office_name = self._detect_office(normalized_tokens)
         entity.road_name = self._detect_road_name(normalized_tokens)
         entity.district = self._detect_labeled_entity(normalized_tokens, self.DISTRICT_MARKERS)
         entity.village = self._detect_labeled_entity(normalized_tokens, self.VILLAGE_MARKERS)
@@ -92,6 +135,67 @@ class EntityDetector:
             return " ".join(captured).title()
         return None
 
+    def _detect_office(self, tokens: list[str]) -> str | None:
+        """Capture an office name anchored on an office marker word.
+
+        Grabs up to two descriptive tokens preceding the marker, e.g.
+        ``andheri post office`` -> ``Andheri Post Office``. Skips markers that
+        are part of a landmark phrase (preceded by a landmark preposition).
+        """
+        for index, token in enumerate(tokens):
+            if token not in self.office_markers:
+                continue
+            preceding: list[str] = []
+            cursor = index - 1
+            while cursor >= 0 and len(preceding) < 2 and tokens[cursor].isalpha():
+                if tokens[cursor] in self._separator_markers():
+                    break
+                preceding.insert(0, tokens[cursor])
+                cursor -= 1
+            # If the phrase is introduced by a landmark preposition it is a
+            # landmark reference, not the address's own office.
+            if cursor >= 0 and tokens[cursor] in self.landmark_prepositions:
+                continue
+            captured = preceding + [token]
+            return " ".join(captured).title()
+        return None
+
+    def _detect_landmark(self, tokens: list[str]) -> str | None:
+        """Capture a landmark phrase following a landmark preposition.
+
+        Collects up to three tokens after the preposition, stopping at a
+        number, pincode, state token, or another preposition.
+        """
+        state_tokens = set(QueryNormalizer.STATE_ABBREVIATIONS.values())
+        for index, token in enumerate(tokens):
+            if token not in self.landmark_prepositions:
+                continue
+            captured: list[str] = []
+            for next_token in tokens[index + 1 :]:
+                if next_token.isdigit() or _PINCODE_PATTERN.fullmatch(next_token):
+                    break
+                if next_token in self.landmark_prepositions or next_token in state_tokens:
+                    break
+                captured.append(next_token)
+                if next_token in self.landmark_keywords or len(captured) >= 3:
+                    break
+            if captured:
+                return " ".join(captured).title()
+        return None
+
+    def _separator_markers(self) -> set[str]:
+        """Structural marker words that should never be absorbed into a name."""
+        return (
+            self.BUILDING_MARKERS
+            | self.ROAD_MARKERS
+            | self.LOCALITY_MARKERS
+            | self.VILLAGE_MARKERS
+            | self.TALUKA_MARKERS
+            | self.DISTRICT_MARKERS
+            | self.office_markers
+            | self.landmark_prepositions
+        )
+
     def _detect_flat_number(self, tokens: list[str]) -> str | None:
         for index, token in enumerate(tokens):
             if token == "flat" and index + 1 < len(tokens) and tokens[index + 1].isdigit():
@@ -109,6 +213,12 @@ class EntityDetector:
             state_tokens = {part.lower() for part in entity.state.split()}
             remaining = [token for token in remaining if token not in state_tokens]
 
+        consumed_tokens: set[str] = set(self.landmark_prepositions)
+        for value in (entity.office_name, entity.landmark):
+            if value:
+                consumed_tokens.update(part.lower() for part in value.split())
+        remaining = [token for token in remaining if token not in consumed_tokens]
+
         filtered = [token for token in remaining if token not in self.BUILDING_MARKERS]
         filtered = [token for token in filtered if token not in self.ROAD_MARKERS]
         filtered = [token for token in filtered if token not in self.LOCALITY_MARKERS]
@@ -116,6 +226,7 @@ class EntityDetector:
         filtered = [token for token in filtered if token not in self.BLOCK_MARKERS]
         filtered = [token for token in filtered if token not in self.TALUKA_MARKERS]
         filtered = [token for token in filtered if token not in self.DISTRICT_MARKERS]
+        filtered = [token for token in filtered if token not in self.office_markers]
 
         if entity.road_name:
             road_tokens = {part.lower() for part in entity.road_name.split()}
@@ -134,6 +245,7 @@ class EntityDetector:
             tail = [token for token in tail if token not in self.BUILDING_MARKERS]
             tail = [token for token in tail if token not in self.ROAD_MARKERS]
             tail = [token for token in tail if token not in self.LOCALITY_MARKERS]
+            tail = [token for token in tail if token not in consumed_tokens]
             if len(tail) >= 3:
                 building_name = " ".join(tail[:-2]).title() or None
                 locality = locality or tail[-2].title()

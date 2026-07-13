@@ -1,65 +1,336 @@
-# Future Scope
+# Indian Address Search Engine
+## Remaining Development Tasks
 
-## Completed
+---
 
-- [x] Project structure and configuration
-- [x] Phase 2 — CSV ingestion with header detection and schema standardization
-- [x] Expanded administrative schema (subdistrict, panchayat, local body, census codes)
-- [x] Subdistrict vs district mapping protection
-- [x] Phase 3 — Preprocessing (clean, validate, dedupe, full_address, hash, quality score)
-- [x] Preprocessing report generation
-- [x] Unit and integration tests for ingestion and preprocessing
+# Phase 1: Query Understanding (Highest Priority)
 
-## Planned — Phase 4: Normalization
+## 1. Entity Detection
+- Improve Building Name extraction
+- Improve Office Name extraction
+- Improve Road Name extraction
+- Improve Locality extraction
+- Improve City/District detection
+- Detect Landmark names
+- Detect House/Flat numbers
+- Detect Pincode accurately
 
-- [ ] Advanced text normalization pipeline (`normalized_dataset.csv`)
-- [ ] Phonetic matching for Indian place names
-- [ ] Stopword removal from address components
-- [ ] Hierarchy validation against official admin boundaries
+---
 
-## Planned — Phase 5: NER Parser
+## 2. Query Normalization
+- Expand abbreviations
+  - Rd → Road
+  - St → Street
+  - Apt → Apartment
+- Remove unwanted punctuation
+- Handle mixed uppercase/lowercase
+- Remove duplicate spaces
+- Handle spelling variations
+- Handle common address abbreviations
 
-- [ ] Train/load NER model for Indian address entity extraction
-- [ ] Tokenizer, entity mapper, confidence scoring
-- [ ] Output `parsed_dataset.csv` with structured entities
+---
 
-## Planned — Phase 6: Elasticsearch
+## 3. Intent Detection
+Support:
 
-- [ ] Index design and bulk indexing
-- [ ] Fuzzy and multi-field search strategies
-- [ ] Query builder for address resolution
+- Full Address Search
+- Building Search
+- Office Search
+- Road Search
+- Locality Search
+- City Search
+- State Search
+- Pincode Search
+- Landmark Search
+- Nearby Search
 
-## Planned — Phase 7: ML Ranking
+---
 
-- [ ] Feature engineering for candidate addresses
-- [ ] XGBoost / similarity-based ranker
-- [ ] Confidence score for top match
+# Phase 2: Elasticsearch Retrieval
 
-## Planned — Phase 8: API and orchestration
+## Improve Query Builder
 
-- [ ] FastAPI REST endpoints
-- [ ] Address resolution orchestrator
-- [ ] Request logging and metrics
+### Exact Search
+- Exact Building match
+- Exact Office match
+- Exact Locality match
+- Exact Road match
+- Exact City match
 
-## Planned — Infrastructure
+### Phrase Search
+- Better match_phrase queries
+- Adjustable phrase slop
+- Preserve word order
 
-- [ ] Populate hierarchy CSV reference files
-- [ ] Expand abbreviation and landmark dictionaries
-- [ ] Performance benchmarks on 4.5M+ row dataset
-- [ ] Docker Compose deployment with Elasticsearch + Kibana
-- [ ] CI/CD pipeline with automated tests
+### Fuzzy Search
+- Handle spelling mistakes
+- Handle missing words
+- Handle extra words
+- Handle OCR mistakes
 
-## Documentation roadmap
+### Autocomplete
+- Prefix search
+- Edge Ngram optimization
+- Typing suggestions
 
-As each phase is implemented, the corresponding doc will be updated:
+### Multi Match
+Search simultaneously across:
 
-| Doc | Phase |
-|-----|-------|
-| `07_NERParser.md` | Phase 5 |
-| `08_SearchStrategies.md` | Phase 6 |
-| `09_Elasticsearch.md` | Phase 6 |
-| `10_MLRanking.md` | Phase 7 |
-| `11_HierarchyValidation.md` | Phase 4 |
-| `12_API.md` | Phase 8 |
-| `14_PerformanceMetrics.md` | Benchmarks |
-| `15_Deployment.md` | Docker / production |
+- searchable_text
+- full_address
+- building_name
+- office_name
+- road_name
+- locality
+- city_name
+- district_name
+- state_name
+
+---
+
+## Boosting
+
+Increase score for
+
+- Building name
+- Office name
+- Pincode
+- Locality
+- Road name
+- City
+- Quality score
+
+---
+
+## Filters
+
+Support filters for
+
+- State
+- District
+- City
+- Locality
+- Pincode
+- Building
+- Office
+- Geo Distance
+
+---
+
+# Phase 3: Candidate Retrieval
+
+(Currently implemented)
+
+Need improvements:
+
+- Retrieve Top 100 candidates
+- Remove duplicate candidates
+- Better confidence calculation
+- Better score normalization
+- Improve retrieval speed
+
+---
+
+# Phase 4: ML Re-ranking
+
+## Feature Engineering
+
+Create ML features:
+
+- BM25 Score
+- Exact Building Match
+- Exact Office Match
+- Exact Locality Match
+- Exact Road Match
+- Exact City Match
+- Exact State Match
+- Exact Pincode Match
+- Token Overlap
+- Jaccard Similarity
+- Cosine Similarity
+- Levenshtein Distance
+- Query Length
+- Candidate Length
+- Geo Distance
+- Quality Score
+- Source Reliability
+
+---
+
+## Dataset Creation
+
+Generate training dataset
+
+Input:
+
+Query
+
+Candidate
+
+Output:
+
+Relevant (1)
+
+Not Relevant (0)
+
+---
+
+## Train ML Model
+
+Possible models
+
+- XGBoost ⭐ (Recommended)
+- LightGBM
+- CatBoost
+- Random Forest
+
+---
+
+## Prediction
+
+For every candidate
+
+Predict:
+
+Relevance Score
+
+Sort candidates using ML score
+
+Return Top K
+
+---
+
+# Phase 5: Final Ranking
+
+Combine
+
+- BM25 Score
+- ML Score
+- Quality Score
+- Exact Match Score
+- Geo Score
+
+Generate Final Confidence Score
+
+Return:
+
+- Best Address
+- Confidence
+- Match Explanation
+
+---
+
+# Phase 6: API Development
+
+Create endpoints
+
+- Search Address
+- Reverse Geocode
+- Autocomplete
+- Suggest Address
+- Nearby Search
+- Health Check
+
+---
+
+# Phase 7: Performance Optimization
+
+- Query caching
+- Connection pooling
+- Batch inference
+- Elasticsearch profiling
+- Reduce response time
+- Parallel feature extraction
+- Parallel ML inference
+
+---
+
+# Phase 8: Testing
+
+Write tests for
+
+- Entity Detector
+- Query Parser
+- Query Builder
+- Search Service
+- Candidate Retrieval
+- ML Re-ranker
+- API
+- End-to-End Search
+
+---
+
+# Phase 9: Deployment
+
+- FastAPI Server
+- Docker
+- IIS/Nginx
+- Elasticsearch
+- Logging
+- Monitoring
+- Production Configuration
+
+---
+
+# Final Pipeline
+
+User Query
+↓
+Normalize Query
+↓
+Entity Detection
+↓
+Intent Detection
+↓
+Query Builder
+↓
+Elasticsearch Retrieval (Top 100)
+↓
+Feature Engineering
+↓
+ML Re-ranker (XGBoost)
+↓
+Final Ranking
+↓
+Confidence Score
+↓
+Best Address Returned
+
+---
+
+# Current Progress
+
+## ✅ Completed
+- Data Ingestion
+- Data Cleaning
+- Elasticsearch Setup
+- Index Creation
+- Custom Mapping
+- Bulk Indexing (~1.9M records)
+- Search Service
+- Query Parser
+- Entity Detection (building/road/locality/city/pincode/state/village/block/taluka)
+- Office Name detection
+- Landmark detection
+- Intent Detection (incl. Office & Nearby intents)
+- Query Normalization (abbreviations, spelling corrections, dedupe)
+- Query Builder (exact/phrase/fuzzy/autocomplete/multi_match + boosting + filters + geo)
+- Candidate Retrieval (Top 100) + Deduplication
+- ML Feature Engineering (ranking/feature_engineering.py)
+- Re-ranker (XGBoost with heuristic fallback)
+- Final Ranking + Confidence Score
+- FastAPI APIs (search, autocomplete, suggest, nearby, reverse-geocode, health)
+- CLI Search
+- Dry Run Mode
+- Docker / docker-compose deployment
+- Test Suite (search, API, parser, preprocessing, ingestion, hierarchy)
+
+## 🚧 In Progress / Optional
+- Training a real XGBoost model (needs a labeled relevance dataset; heuristic used until then)
+- Performance tuning (caching, batch inference)
+
+## ❌ Remaining
+- Labeled training-dataset generation for ML re-ranker
+- Production hardening (auth, rate limiting, monitoring dashboards)
+
+See `docs/18_EndToEndRunGuide.md` for the full start-to-end command sequence.

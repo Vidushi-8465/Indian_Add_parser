@@ -45,6 +45,7 @@ class SearchService:
         "district",
         "state",
         "building",
+        "office",
         "road",
         "full_address",
         "pincode",
@@ -279,7 +280,40 @@ class SearchService:
 
     @staticmethod
     def _retrieve_candidates(raw_hits: list[dict[str, Any]]) -> list[SearchCandidate]:
-        return [SearchCandidate.from_hit(hit) for hit in raw_hits]
+        """Map ES hits to candidates, dropping duplicates.
+
+        Elasticsearch returns hits ordered by score, so the first occurrence of
+        a duplicate is the highest scoring one and is the one we keep. Duplicates
+        are identified by ``address_hash`` when present, otherwise by a
+        normalized ``full_address``, falling back to the document id.
+        """
+        candidates: list[SearchCandidate] = []
+        seen: set[str] = set()
+        position = 0
+        for hit in raw_hits:
+            candidate = SearchCandidate.from_hit(hit)
+            key = SearchService._dedup_key(candidate)
+            if key is not None:
+                if key in seen:
+                    continue
+                seen.add(key)
+            position += 1
+            candidate.retrieval_position = position
+            candidate.es_rank = position
+            candidates.append(candidate)
+        return candidates
+
+    @staticmethod
+    def _dedup_key(candidate: SearchCandidate) -> str | None:
+        if candidate.address_hash:
+            return f"hash:{candidate.address_hash}"
+        if candidate.full_address:
+            normalized = " ".join(candidate.full_address.lower().split())
+            if normalized:
+                return f"addr:{normalized}"
+        if candidate.id:
+            return f"id:{candidate.id}"
+        return None
 
     @staticmethod
     def _merge_entities(entities: SearchEntities) -> SearchEntities:
@@ -331,6 +365,10 @@ class SearchService:
             return "state"
         if intent == "BUILDING_SEARCH":
             return "building"
+        if intent == "OFFICE_SEARCH":
+            return "office"
+        if intent == "NEARBY_SEARCH":
+            return "fuzzy"
         if intent == "ROAD_SEARCH":
             return "road"
         if intent == "FULL_ADDRESS_SEARCH":

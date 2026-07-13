@@ -1,1 +1,39 @@
-{}
+{
+  "building_types": [
+    "apartment",
+    "apartments",
+    "tower",
+    "towers",
+    "wing",
+    "residency",
+    "heights",
+    "enclave",
+    "villa",
+    "villas",
+    "bungalow",
+    "chawl",
+    "mansion",
+    "arcade",
+    "plaza",
+    "complex",
+    "block",
+    "flat",
+    "house",
+    "plot",
+    "shop"
+  ],
+  "office_types": [
+    "office",
+    "gpo",
+    "headquarters",
+    "hq",
+    "bhavan",
+    "bhawan",
+    "sadan",
+    "kendra",
+    "karyalaya",
+    "chamber",
+    "chambers",
+    "corporate"
+  ]
+}

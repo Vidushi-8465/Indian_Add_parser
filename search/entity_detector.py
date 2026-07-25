@@ -40,8 +40,11 @@ class EntityDetector:
 
     # Fallbacks used when the dictionary files are missing or empty.
     DEFAULT_OFFICE_MARKERS = {
-        "office", "gpo", "headquarters", "hq", "bhavan", "bhawan",
+        "office", "offices", "service", "services",
+        "gpo", "headquarters", "hq", "bhavan", "bhawan",
         "sadan", "kendra", "karyalaya", "chamber", "chambers", "corporate",
+        "corp", "ltd", "limited", "pvt", "private", "bank", "hospital",
+        "school", "institute", "company",
     }
     DEFAULT_LANDMARK_PREPOSITIONS = {
         "near", "opposite", "behind", "beside", "above", "below",
@@ -138,8 +141,8 @@ class EntityDetector:
     def _detect_office(self, tokens: list[str]) -> str | None:
         """Capture an office name anchored on an office marker word.
 
-        Grabs up to two descriptive tokens preceding the marker, e.g.
-        ``andheri post office`` -> ``Andheri Post Office``. Skips markers that
+        Grabs up to four descriptive tokens preceding the marker, e.g.
+        ``tvs credit service`` -> ``Tvs Credit Service``. Skips markers that
         are part of a landmark phrase (preceded by a landmark preposition).
         """
         for index, token in enumerate(tokens):
@@ -147,7 +150,7 @@ class EntityDetector:
                 continue
             preceding: list[str] = []
             cursor = index - 1
-            while cursor >= 0 and len(preceding) < 2 and tokens[cursor].isalpha():
+            while cursor >= 0 and len(preceding) < 4 and tokens[cursor].isalpha():
                 if tokens[cursor] in self._separator_markers():
                     break
                 preceding.insert(0, tokens[cursor])
@@ -157,6 +160,8 @@ class EntityDetector:
             if cursor >= 0 and tokens[cursor] in self.landmark_prepositions:
                 continue
             captured = preceding + [token]
+            if len(captured) < 2:
+                continue
             return " ".join(captured).title()
         return None
 

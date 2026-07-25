@@ -35,7 +35,33 @@ class QueryParser:
     """Parse raw queries into tokens, phrases, and a coarse search intent."""
 
     BUILDING_MARKERS = {"flat", "house", "houseno", "housenumber", "plot", "shop", "apartment", "tower", "wing"}
-    OFFICE_MARKERS = {"office", "gpo", "headquarters", "hq", "bhavan", "bhawan", "sadan", "kendra", "karyalaya", "chamber", "chambers"}
+    OFFICE_MARKERS = {
+        "office",
+        "offices",
+        "service",
+        "services",
+        "gpo",
+        "headquarters",
+        "hq",
+        "bhavan",
+        "bhawan",
+        "sadan",
+        "kendra",
+        "karyalaya",
+        "chamber",
+        "chambers",
+        "corporate",
+        "corp",
+        "ltd",
+        "limited",
+        "pvt",
+        "private",
+        "bank",
+        "hospital",
+        "school",
+        "institute",
+        "company",
+    }
     LANDMARK_MARKERS = {"near", "opposite", "behind", "beside", "adjacent"}
     ROAD_MARKERS = {"road", "street", "lane", "rd", "st"}
     VILLAGE_MARKERS = {"village", "vill", "gram"}

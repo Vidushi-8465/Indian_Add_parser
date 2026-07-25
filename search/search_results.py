@@ -10,6 +10,21 @@ def _compact_mapping(values: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in values.items() if value not in (None, "", [], {})}
 
 
+def _confidence_label(confidence: float | None) -> str:
+    value = float(confidence or 0.0)
+    if value >= 0.80:
+        return "high"
+    if value >= 0.60:
+        return "medium"
+    return "low"
+
+
+def _values_match(query_value: Any, candidate_value: Any) -> bool:
+    if not query_value or not candidate_value:
+        return False
+    return str(query_value).strip().casefold() == str(candidate_value).strip().casefold()
+
+
 @dataclass(slots=True)
 class SearchEntities:
     building_name: str | None = None
@@ -120,19 +135,83 @@ class SearchResult:
     validation_errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        retrieved_items = [candidate.to_dict() for candidate in self.retrieved_candidates]
-        result_items = [candidate.to_dict() for candidate in self.results]
+        # Keep lists ordered by confidence (highest first).
+        ordered_results = sorted(
+            self.results,
+            key=lambda candidate: (candidate.confidence, candidate.score, candidate.bm25_score),
+            reverse=True,
+        )
+        ordered_retrieved = sorted(
+            self.retrieved_candidates,
+            key=lambda candidate: (candidate.confidence, candidate.score, candidate.bm25_score),
+            reverse=True,
+        )
+        result_items = [candidate.to_dict() for candidate in ordered_results]
+        retrieved_items = [candidate.to_dict() for candidate in ordered_retrieved]
+        best = self.best_match(pool=ordered_results or ordered_retrieved)
         return {
             "query": self.query,
             "normalized_query": self.normalized_query,
             "intent": self.intent,
             "strategy": self.strategy,
             "parsed_entities": self.parsed_entities.to_dict(),
-            "retrieved_candidates": retrieved_items,
+            "best_match": best,
             "results": result_items,
             "candidates": result_items,
+            "retrieved_candidates": retrieved_items,
             "took_ms": self.execution_time_ms,
             "execution_time_ms": self.execution_time_ms,
             "total_hits": self.total_hits,
             "validation_errors": list(self.validation_errors),
         }
+
+    def best_match(
+        self,
+        pool: list[SearchCandidate] | None = None,
+    ) -> dict[str, Any] | None:
+        """The single best address: the candidate with the highest confidence.
+
+        Ties are broken by score, then BM25, so the strongest overall match wins.
+        """
+        candidates = pool if pool is not None else self.results
+        if not candidates:
+            return None
+        best = max(
+            candidates,
+            key=lambda candidate: (candidate.confidence, candidate.score, candidate.bm25_score),
+        )
+        return {
+            "full_address": best.full_address,
+            "confidence": best.confidence,
+            "confidence_label": _confidence_label(best.confidence),
+            "score": best.score,
+            "building_name": best.building_name,
+            "office_name": best.office_name,
+            "road_name": best.road_name,
+            "locality": best.locality,
+            "city_name": best.city_name,
+            "district_name": best.district_name,
+            "state_name": best.state_name,
+            "pincode": best.pincode,
+            "latitude": best.latitude,
+            "longitude": best.longitude,
+            "explanation": self._match_explanation(best),
+        }
+
+    def _match_explanation(self, candidate: "SearchCandidate") -> str:
+        entity = self.parsed_entities
+        checks = [
+            ("pincode", entity.pincode, candidate.pincode),
+            ("building", entity.building_name, candidate.building_name),
+            ("office", entity.office_name, candidate.office_name),
+            ("road", entity.road_name, candidate.road_name),
+            ("locality", entity.locality, candidate.locality),
+            ("city", entity.city, candidate.city_name),
+            ("district", entity.district, candidate.district_name),
+            ("state", entity.state, candidate.state_name),
+        ]
+        matched = [name for name, query_value, candidate_value in checks if _values_match(query_value, candidate_value)]
+        label = _confidence_label(candidate.confidence)
+        if matched:
+            return f"{label} confidence — matched on {', '.join(matched)}"
+        return f"{label} confidence — best text/similarity match"

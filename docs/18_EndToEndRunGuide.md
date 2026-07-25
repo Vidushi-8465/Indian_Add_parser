@@ -6,26 +6,28 @@ running API — mapped to the phases in `docs/16_FutureScope.md`.
 Run everything from the project root: `C:\Vidushi\Indian_Add_Geo`.
 Commands are shown for **Windows PowerShell** (your shell).
 
+This guide assumes **Elasticsearch is installed and running locally** (not Docker).
+
 ---
 
-## ⏱️ Do I have to re-run Phases 1 & 2 every time? — No.
+## Do I have to re-run data setup every time? — No.
 
-The expensive work — **ingestion → preprocessing → index creation → bulk indexing
-(~1.9M records)** — is **one-time setup** (Steps 1–4 below). Once the data is in
-Elasticsearch it stays there. You only repeat those steps if:
+The expensive work — **ingestion → preprocessing → index creation → bulk indexing** —
+is **one-time setup** (Steps 1–4 below). Once the data is in Elasticsearch it stays
+there. You only repeat those steps if:
 
-- the raw CSV data changes, or
+- raw CSVs under `datasets/raw/csv/` change (add/remove/update files), or
 - you delete/recreate the Elasticsearch index.
 
-**Every day / normal use = Step 0 (start ES) + Steps 6 or 7 (query / API).** Nothing else.
+**Normal use = Step 0 (confirm ES) + Steps 6 or 7 (CLI search / API).**
 
 | Step | Cost | Repeat? |
 |------|------|---------|
-| 0. Start Elasticsearch | seconds | every session |
-| 1. Ingestion | minutes | only if raw data changes |
-| 2. Preprocessing | minutes | only if raw data changes |
+| 0. Confirm Elasticsearch | seconds | every session |
+| 1. Ingestion | minutes–long | only if raw data changes |
+| 2. Preprocessing | minutes–long | only if raw data changes |
 | 3. Create index | seconds | only if index dropped |
-| 4. Bulk index ~1.9M | **slow (one-time)** | only if data/index changes |
+| 4. Bulk index | **slow** | only if data/index changes |
 | 5. Verify index | seconds | optional |
 | 6. CLI search | instant | per query |
 | 7. API | instant | per session |
@@ -42,46 +44,82 @@ python -m venv .venv
 # Install dependencies (once, or after requirements change)
 pip install -r requirements.txt
 
-# Start Elasticsearch (every session). Easiest via Docker:
-docker run -d --name es `
-  -p 9200:9200 `
-  -e "discovery.type=single-node" `
-  -e "xpack.security.enabled=false" `
-  docker.elastic.co/elasticsearch/elasticsearch:8.14.0
+# Copy env template if you do not have a .env yet
+copy .env.example .env
 
-# Confirm it is up (should return cluster JSON)
+# Confirm Elasticsearch is up on localhost:9200 (should return cluster JSON)
 curl http://localhost:9200
 ```
 
-Credentials (if any) go in `.env` (`ELASTIC_USERNAME`, `ELASTIC_PASSWORD`); the host
-is configured in `configs/elasticsearch.yaml`.
+Host and credentials are configured in `configs/elasticsearch.yaml` and can be
+overridden via `.env` (`ELASTIC_HOST`, `ELASTIC_USERNAME`, `ELASTIC_PASSWORD`,
+`ELASTIC_INDEX`).
 
 ---
 
-## ONE-TIME DATA SETUP (Steps 1–4) — skip if the index already exists
+## When you add new CSV files
 
-### Step 1 — Data ingestion (Phase: Data Pipeline)
-Merges the raw CSVs in `datasets/raw/csv/` into `datasets/master/master_dataset.csv`.
+1. Put new files in `datasets/raw/csv/` (ingestion auto-discovers all `.csv` files).
+2. If headers are unusual, add aliases in `configs/ingestion.yaml` → `column_aliases`
+   (no Python changes needed for normal column names).
+3. Delete previous generated outputs, then re-run Steps 1–4.
+
+```powershell
+# Generated outputs to clear before a full rebuild
+Remove-Item datasets\master\master_dataset.csv -ErrorAction SilentlyContinue
+Remove-Item datasets\master\master_metadata.json -ErrorAction SilentlyContinue
+Remove-Item datasets\processed\cleaned_dataset.csv -ErrorAction SilentlyContinue
+Remove-Item datasets\processed\preprocessing_metadata.json -ErrorAction SilentlyContinue
+Remove-Item reports\preprocessing_report.json -ErrorAction SilentlyContinue
+Remove-Item reports\indexing_report.json -ErrorAction SilentlyContinue
+Remove-Item reports\indexing_performance_report.json -ErrorAction SilentlyContinue
+```
+
+**Do not delete:** `datasets/raw/csv/`, `datasets/dictionaries/`, `datasets/hierarchy/`,
+configs, or code.
+
+After ingest, open `datasets/master/master_metadata.json` and check each new file’s
+`unmapped_columns`. Important fields (building name/address, city address, etc.)
+should appear under `column_mapping`, not unmapped.
+
+Optional (only if you will rebuild the ML ranker after the new index is ready):
+
+```powershell
+Remove-Item datasets\ranking\train.jsonl -ErrorAction SilentlyContinue
+Remove-Item models\ranking_model.json -ErrorAction SilentlyContinue
+Remove-Item models\ranking_model.json.features.json -ErrorAction SilentlyContinue
+```
+
+---
+
+## ONE-TIME DATA SETUP (Steps 1–4) — skip if the index is already current
+
+### Step 1 — Data ingestion
+Merges all CSVs in `datasets/raw/csv/` into `datasets/master/master_dataset.csv`.
+
 ```powershell
 python scripts/ingest_data.py
 ```
 
-### Step 2 — Preprocessing (Phase: Preprocessing / Normalization)
-Cleans, dedupes, scores quality → `datasets/processed/cleaned_dataset.csv`.
+### Step 2 — Preprocessing
+Cleans, dedupes, builds `full_address`, scores quality →
+`datasets/processed/cleaned_dataset.csv`.
+
 ```powershell
 python scripts/preprocess_data.py
 ```
 
-### Step 3 — Create the Elasticsearch index (Phase 9: index + mapping)
+### Step 3 — Create the Elasticsearch index
 ```powershell
 python scripts/create_es_index.py            # create if missing
 python scripts/create_es_index.py --recreate # drop & recreate (destroys data)
 ```
 
-### Step 4 — Bulk index the addresses (Phase 2/3: retrieval backbone) — SLOW, one-time
+### Step 4 — Bulk index addresses — SLOW
 ```powershell
 python scripts/index_addresses.py
-python scripts/index_addresses.py --recreate-index   # recreate index then load
+# Or recreate index and load in one go:
+python scripts/index_addresses.py --recreate-index
 ```
 
 ### Step 5 — Verify the index (optional)
@@ -91,38 +129,51 @@ python scripts/index_stats.py
 
 ---
 
-## PER-USE (Steps 6–7) — this is what you run normally
+## PER-USE (Steps 6–7) — what you run normally
 
-### Step 6 — Search from the CLI (Phases 1–5)
-`--dry-run` builds the query and shows parsed entities/intent **without** Elasticsearch
-— great for confirming query understanding.
+### Step 6 — Search from the CLI
+
+By default the CLI prints the **BEST MATCH** only and saves full JSON under
+`datasets/search_results/`. Use `-v` / `--verbose` for the full candidate dump.
+Use `--dry-run` to inspect normalization, intent, and entities without Elasticsearch.
 
 ```powershell
-# Dry run — inspect normalization, intent, and parsed entities (no ES needed)
+# Dry run — no ES needed
 python -m search.search_service --query "Flat 302 Lotus Heights Baner Pune 411045" --dry-run
 
-# Office detection  -> OFFICE_SEARCH intent + office_name entity
-python -m search.search_service --query "Reliance Corporate Office Bandra Mumbai" --dry-run
+# Live search — shows BEST MATCH + writes datasets/search_results/*.json
+python -m search.search_service --query "hinjewadi pune"
+python -m search.search_service --query "tvs credit service" -v
 
-# Landmark detection -> NEARBY_SEARCH intent + landmark entity
-python -m search.search_service --query "near lotus temple delhi" --dry-run
-
-# Live search (needs the index from Steps 1–4). Returns re-ranked, deduped results.
-python -m search.search_service --query "Flat 302 Lotus Heights Baner Pune 411045"
-
-# Live search with filters / geo
+# Filters / geo
 python -m search.search_service --query "tcs hinjewadi" --state Maharashtra --size 10
 python -m search.search_service --query "cafe" --lat 18.52 --lon 73.85 --distance 2km
+
+# Skip saving JSON
+python -m search.search_service --query "hinjewadi pune" --no-save
 ```
 
-### Step 7 — Run the API (Phase 6)
+**Top-1 best address:** live search ends with a `BEST MATCH` block (address +
+confidence + why). JSON includes `best_match`. For a programmatic single-answer path:
+
+```python
+from orchestrator.address_resolution_orchestrator import AddressResolutionOrchestrator
+from es_index.client import build_elasticsearch_client
+from utils.file_utils import load_yaml_config
+from utils.constants import DEFAULT_ELASTICSEARCH_CONFIG
+
+config = load_yaml_config(DEFAULT_ELASTICSEARCH_CONFIG)
+orch = AddressResolutionOrchestrator(build_elasticsearch_client(config), config)
+answer = orch.resolve("hinjewadi pune")
+print(answer["best_match"])       # top-1 address + confidence + explanation
+print(answer["alternatives"])     # next best candidates
+```
+
+### Step 7 — Run the API
 ```powershell
 python scripts/run_api.py
 # Serves on http://localhost:8000 ; interactive docs at http://localhost:8000/docs
 ```
-
-Endpoints (all use the full pipeline: normalize → entities → intent → retrieve →
-dedupe → re-rank):
 
 ```powershell
 # Health
@@ -131,7 +182,7 @@ curl http://localhost:8000/health
 # Full address search (POST)
 curl -X POST http://localhost:8000/search `
   -H "Content-Type: application/json" `
-  -d '{"query":"Flat 302 Lotus Heights Baner Pune 411045","strategy":"auto","size":10}'
+  -d "{\"query\":\"Flat 302 Lotus Heights Baner Pune 411045\",\"strategy\":\"auto\",\"size\":10}"
 
 # Autocomplete (prefix)
 curl "http://localhost:8000/autocomplete?q=lotus%20heig&size=10"
@@ -142,7 +193,7 @@ curl "http://localhost:8000/suggest?q=lotus%20hights%20baner&size=10"
 # Nearby (geo radius)
 curl "http://localhost:8000/nearby?lat=18.52&lon=73.85&distance=2km&size=20"
 
-# Reverse geocode (nearest address to a point)
+# Reverse geocode
 curl "http://localhost:8000/reverse-geocode?lat=18.52&lon=73.85"
 ```
 
@@ -150,43 +201,40 @@ curl "http://localhost:8000/reverse-geocode?lat=18.52&lon=73.85"
 
 ## Phase 4 & 5 — ML Re-ranking (optional)
 
-The re-ranker (`ranking/`) runs **out of the box using a heuristic score combiner**
-(BM25 + exact-match + quality). No model file is required — search works immediately.
+The re-ranker works out of the box with a **heuristic** (entity fit + BM25 +
+exact-match + quality). When clear query entities are present, entity fit is
+preferred over a weak trained model so locality/office matches are not demoted.
 
-To use a trained XGBoost model instead, point the ranker at a model file:
+To train an XGBoost model (requires ES + populated index):
+
 ```powershell
-$env:RANKING_MODEL_PATH = "models/ranking_model.json"
+# M1 — build training rows
+python scripts/build_ranking_dataset.py --num-queries 1500
+# Output: datasets/ranking/train.jsonl
+
+# M2 — train + evaluate
+python scripts/train_ranker.py
+# Saves models/ranking_model.json (+ .features.json sidecar)
 ```
-If the file is absent, the system silently falls back to the heuristic. (Training a
-model requires a labeled `(query, candidate, relevant)` dataset — not shipped, since
-there is no ground-truth label set yet.)
+
+Delete or move `models/ranking_model.json` to force the heuristic-only path.
+Optional config:
+
+```yaml
+# configs/elasticsearch.yaml
+ranking:
+  model_path: models/ranking_model.json
+```
 
 ---
 
 ## Phase 8 — Testing
 
 ```powershell
-python -m pytest -q                    # full suite
-python -m pytest tests/test_search.py -q   # search pipeline only (no ES needed)
-python -m pytest tests/test_api.py -q      # API (mocks Elasticsearch)
+python -m pytest -q
+python -m pytest tests/test_search.py -q
+python -m pytest tests/test_api.py -q
 ```
-
----
-
-## Phase 9 — Deployment (Docker)
-
-Bring up Elasticsearch + API together:
-```powershell
-# First set configs/elasticsearch.yaml -> connection.hosts: ["http://elasticsearch:9200"]
-docker compose up --build
-```
-Then run the one-time data setup (Steps 1–4) inside the api container the first time:
-```powershell
-docker compose exec api python scripts/ingest_data.py
-docker compose exec api python scripts/preprocess_data.py
-docker compose exec api python scripts/index_addresses.py --recreate-index
-```
-The API is then available at `http://localhost:8000`.
 
 ---
 
@@ -198,7 +246,7 @@ User query
   -> entity detection (building/office/landmark/...)  [search/entity_detector.py]
   -> intent detection                                 [search/query_parser.py]
   -> Elasticsearch query build (boost/filter/geo)     [search/query_builder.py]
-  -> retrieve top 100 + dedupe                         [search/search_service.py]
-  -> re-rank (ML or heuristic) + confidence            [ranking/]
-  -> best addresses returned
+  -> retrieve top N + dedupe                          [search/search_service.py]
+  -> re-rank (entity fit / ML / heuristic) + confidence [ranking/]
+  -> BEST MATCH + candidates returned / saved
 ```

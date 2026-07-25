@@ -1,6 +1,8 @@
 rd, road
 st, street
 str, street
+hinjewadi, hinjavadi
+hinjavadi, hinjewadi
 dr, drive
 ave, avenue
 blvd, boulevard

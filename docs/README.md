@@ -20,6 +20,8 @@ Indian Address Geocoding and Resolution Engine — technical documentation.
 | 14 | [Performance Metrics](14_PerformanceMetrics.md) | Benchmarks (planned) | 🔜 |
 | 15 | [Deployment](15_Deployment.md) | Docker and deployment (planned) | 🔜 |
 | 16 | [Future Scope](16_FutureScope.md) | Roadmap | ✅ |
+| 18 | [End-to-End Run Guide](18_EndToEndRunGuide.md) | Commands (local ES, no Docker) | ✅ |
+| 19 | [Project Summary](19_ProjectSummary.md) | Full project summary | ✅ |
 
 ## Quick commands
 
@@ -29,6 +31,9 @@ python scripts\ingest_data.py
 
 # Phase 3 – Preprocessing
 python scripts\preprocess_data.py
+
+# Search (after Elasticsearch index is built)
+python -m search.search_service --query "hinjewadi pune"
 
 # Tests
 python -m pytest tests\ -v

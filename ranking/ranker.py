@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import os
 import pickle
 from typing import Any, Sequence
@@ -15,11 +16,13 @@ try:
 except Exception:  # pragma: no cover - optional dependency fallback
     XGBRanker = None  # type: ignore[assignment]
 
+from search.locality_aliases import locality_variants
 from search.search_results import SearchCandidate, SearchEntities
 
 from .confidence_score import ConfidenceScorer
 from .feature_engineering import RankingFeatureBuilder, RankingFeatureVector
 from .scorer import RankingScoreCombiner
+from .similarity import exact_match, normalize_text, safe_ratio
 
 
 @dataclass(slots=True)
@@ -42,8 +45,11 @@ class MLRanker:
         self.confidence_scorer = confidence_scorer or ConfidenceScorer()
         self.score_combiner = score_combiner or RankingScoreCombiner()
         self.artifact = RankingModelArtifact(model_path=str(model_path) if model_path else self._default_model_path())
-        self.model: Any | None = self._load_model(self.artifact.model_path)
         self.feature_names: list[str] = self.feature_builder.feature_names()
+        # When a trained model is loaded, its feature order is fixed and must not
+        # be recomputed per request, or inference columns would drift from training.
+        self._features_locked: bool = False
+        self.model: Any | None = self._load_model(self.artifact.model_path)
 
     def rank_candidates(
         self,
@@ -73,7 +79,8 @@ class MLRanker:
                 )
             )
 
-        self.feature_names = self.feature_builder.feature_names(feature_rows)
+        if not self._features_locked:
+            self.feature_names = self.feature_builder.feature_names(feature_rows)
         ranked_candidates: list[SearchCandidate] = []
 
         if self.model is None:
@@ -81,30 +88,154 @@ class MLRanker:
         else:
             model_scores = self._predict_scores(feature_rows)
 
+        has_entities = self._has_entity_signal(parsed_entities)
         for candidate, feature_row, model_score in zip(candidates, feature_rows, model_scores):
             exact_match_count = sum(
                 int(value)
                 for key, value in feature_row.values.items()
                 if key.startswith("exact_")
             )
+            entity_fit = self._entity_fit(parsed_entities, candidate, feature_row)
             bm25_score = candidate.bm25_score or candidate.score
+            # Prefer entity-aware heuristic when the query has clear entities —
+            # a weak/noisy ranking model must not demote the true best match.
+            effective_model_score = None if has_entities else model_score
             final_score = self.score_combiner.combine(
-                model_score=model_score,
+                model_score=effective_model_score,
                 bm25_score=bm25_score,
                 exact_match_count=exact_match_count,
                 quality_score=candidate.quality_score,
+                entity_fit=entity_fit,
             )
             candidate.score = final_score
             candidate.confidence = self.confidence_scorer.score(
-                model_score=model_score,
+                model_score=effective_model_score,
                 bm25_score=bm25_score,
                 exact_match_count=exact_match_count,
                 quality_score=candidate.quality_score,
+                entity_fit=entity_fit,
             ).confidence
             ranked_candidates.append(candidate)
 
-        ranked_candidates.sort(key=lambda item: (item.score, item.confidence, item.bm25_score), reverse=True)
+        # Confidence is the public ranking signal — keep the highest-confidence
+        # candidate first so results[0] and best_match always agree.
+        ranked_candidates.sort(
+            key=lambda item: (item.confidence, item.score, item.bm25_score),
+            reverse=True,
+        )
         return ranked_candidates
+
+    @staticmethod
+    def _has_entity_signal(parsed_entities: SearchEntities) -> bool:
+        return any(
+            (
+                parsed_entities.locality,
+                parsed_entities.city,
+                parsed_entities.building_name,
+                parsed_entities.office_name,
+                parsed_entities.road_name,
+                parsed_entities.pincode,
+                parsed_entities.district,
+                parsed_entities.state,
+            )
+        )
+
+    @classmethod
+    def _locality_similarity(cls, query_locality: str | None, candidate_locality: str | None) -> float:
+        if not query_locality or not candidate_locality:
+            return 0.0
+        ratios = [
+            safe_ratio(variant, candidate_locality)
+            for variant in locality_variants(query_locality)
+        ]
+        ratio = max(ratios) if ratios else 0.0
+        prefix = cls._prefix_affinity(query_locality, candidate_locality)
+        for variant in locality_variants(query_locality):
+            prefix = max(prefix, cls._prefix_affinity(variant, candidate_locality))
+        # Prefer real spelling variants (Hinjavadi) over shared suffixes (Shindewadi).
+        return max(0.0, min(1.0, 0.55 * ratio + 0.45 * prefix))
+
+    @staticmethod
+    def _prefix_affinity(left: str | None, right: str | None) -> float:
+        left_norm = normalize_text(left)
+        right_norm = normalize_text(right)
+        if not left_norm or not right_norm:
+            return 0.0
+        shared = 0
+        for left_char, right_char in zip(left_norm, right_norm):
+            if left_char != right_char:
+                break
+            shared += 1
+        return shared / max(len(left_norm), len(right_norm))
+
+    @classmethod
+    def _entity_fit(
+        cls,
+        parsed_entities: SearchEntities,
+        candidate: SearchCandidate,
+        feature_row: RankingFeatureVector,
+    ) -> float:
+        """How well the candidate matches detected query entities (0–1)."""
+        fit = 0.0
+        locality_sim = 0.0
+
+        if parsed_entities.locality:
+            locality_sim = cls._locality_similarity(parsed_entities.locality, candidate.locality)
+            # Also accept locality sitting in full_address when dedicated field is weak.
+            address_sim = max(
+                safe_ratio(variant, candidate.full_address)
+                for variant in locality_variants(parsed_entities.locality)
+            )
+            locality_sim = max(locality_sim, 0.85 * address_sim if address_sim >= 0.5 else locality_sim)
+            fit += 0.60 * locality_sim
+            if locality_sim >= 0.88:
+                fit += 0.15
+
+        if parsed_entities.office_name:
+            office_sim = max(
+                safe_ratio(parsed_entities.office_name, candidate.office_name),
+                safe_ratio(parsed_entities.office_name, candidate.building_name),
+                safe_ratio(parsed_entities.office_name, candidate.full_address),
+            )
+            fit += 0.55 * office_sim
+            if office_sim >= 0.85:
+                fit += 0.15
+
+        if parsed_entities.city:
+            city_q = parsed_entities.city
+            city_variants = locality_variants(city_q) or [normalize_text(city_q)]
+            city_hit = any(
+                exact_match(variant, candidate.city_name)
+                or exact_match(variant, candidate.district_name)
+                for variant in city_variants
+            )
+            city_ratio = max(
+                max(safe_ratio(variant, candidate.city_name) for variant in city_variants),
+                max(safe_ratio(variant, candidate.district_name) for variant in city_variants),
+            )
+            # City alone must not crown a weak locality match like Shindewadi for Hinjewadi.
+            city_weight = 0.35 if (not parsed_entities.locality or locality_sim >= 0.72) else 0.08
+            fit += city_weight if city_hit else city_weight * city_ratio
+
+        if parsed_entities.building_name:
+            building_ratio = max(
+                float(feature_row.values.get("building_name__building_name__ratio", 0.0)),
+                safe_ratio(parsed_entities.building_name, candidate.building_name),
+                safe_ratio(parsed_entities.building_name, candidate.full_address),
+            )
+            fit += 0.25 * building_ratio
+
+        if parsed_entities.pincode and exact_match(parsed_entities.pincode, candidate.pincode):
+            fit += 0.25
+
+        if parsed_entities.road_name:
+            road_sim = max(
+                safe_ratio(parsed_entities.road_name, candidate.road_name),
+                safe_ratio(parsed_entities.road_name, candidate.full_address),
+            )
+            fit += 0.15 * road_sim
+
+        return max(0.0, min(1.0, fit))
 
     def fit(
         self,
@@ -116,6 +247,11 @@ class MLRanker:
     ) -> Any:
         if XGBRanker is None:
             raise RuntimeError("xgboost is required to train the ranking model.")
+
+        derived_names = self._derive_feature_names(feature_rows)
+        if derived_names:
+            self.feature_names = derived_names
+            self._features_locked = True
 
         matrix = self._to_matrix(feature_rows)
         ranker = XGBRanker(
@@ -146,6 +282,11 @@ class MLRanker:
         else:
             with path.open("wb") as handle:
                 pickle.dump(self.model, handle)
+        # Persist the training feature order so inference builds identical columns.
+        if self.feature_names:
+            self._feature_sidecar_path(path).write_text(
+                json.dumps(self.feature_names), encoding="utf-8"
+            )
 
     def predict(self, feature_rows: Sequence[Sequence[float] | dict[str, float]]) -> list[float]:
         if not feature_rows:
@@ -203,6 +344,8 @@ class MLRanker:
         if not path.exists():
             return None
 
+        self._load_feature_names(path)
+
         if XGBRanker is not None and path.suffix.lower() in {".json", ".ubj", ".bst"}:
             ranker = XGBRanker()
             ranker.load_model(str(path))
@@ -210,6 +353,36 @@ class MLRanker:
 
         with path.open("rb") as handle:
             return pickle.load(handle)
+
+    def _load_feature_names(self, model_path: Path) -> None:
+        sidecar = self._feature_sidecar_path(model_path)
+        if not sidecar.exists():
+            return
+        try:
+            names = json.loads(sidecar.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if isinstance(names, list) and names:
+            self.feature_names = [str(name) for name in names]
+            self._features_locked = True
+
+    @staticmethod
+    def _feature_sidecar_path(model_path: Path) -> Path:
+        return model_path.with_suffix(model_path.suffix + ".features.json")
+
+    @staticmethod
+    def _derive_feature_names(feature_rows: Sequence[Any]) -> list[str]:
+        names: list[str] = []
+        seen: set[str] = set()
+        for row in feature_rows:
+            values = row.values if hasattr(row, "values") and isinstance(getattr(row, "values"), dict) else row
+            if not isinstance(values, dict):
+                return []
+            for name in values:
+                if name not in seen:
+                    seen.add(name)
+                    names.append(str(name))
+        return names
 
     @staticmethod
     def _default_model_path() -> str:

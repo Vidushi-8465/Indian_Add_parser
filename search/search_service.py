@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -18,8 +20,11 @@ from .reranker import ResultReranker
 from .search_results import SearchAnalysis, SearchCandidate, SearchEntities, SearchResult
 from app_logging.logger import setup_logging
 from es_index.client import build_elasticsearch_client, test_connection
+from utils.constants import PROJECT_ROOT
+from utils.file_utils import ensure_parent_directory
 
 LOGGER = logging.getLogger(__name__)
+DEFAULT_SEARCH_OUTPUT_DIR = PROJECT_ROOT / "datasets" / "search_results"
 
 
 @dataclass(slots=True)
@@ -107,6 +112,7 @@ class SearchService:
             lat=lat,
             lon=lon,
             state=state or analysis.parsed_entities.state,
+            parsed_entities=analysis.parsed_entities,
         )
         result_size = min(size or self.default_size, self.max_size)
         retrieval_size = self.top_n
@@ -186,6 +192,7 @@ class SearchService:
         candidates = self._retrieve_candidates(raw_hits)
         ranked = self.reranker.rerank(plan.analysis.normalized_query or query, plan.analysis.parsed_entities, candidates)
         execution_time_ms = int((perf_counter() - start_time) * 1000)
+        # ranked is confidence-desc; results[0] is always the highest-confidence hit.
         final_results = ranked[: plan.size]
 
         result = SearchResult(
@@ -193,7 +200,7 @@ class SearchService:
             normalized_query=plan.analysis.normalized_query,
             intent=plan.analysis.intent,
             parsed_entities=plan.analysis.parsed_entities,
-            retrieved_candidates=candidates,
+            retrieved_candidates=ranked,
             results=final_results,
             execution_time_ms=execution_time_ms,
             total_hits=total_count,
@@ -346,12 +353,31 @@ class SearchService:
         lat: float | None,
         lon: float | None,
         state: str | None,
+        parsed_entities: SearchEntities | None = None,
     ) -> str:
         if strategy != "auto":
             return strategy if strategy in self.STRATEGIES else "auto"
+        entities = parsed_entities or SearchEntities()
         if lat is not None and lon is not None:
             return "geospatial"
-        if pincode:
+        # Prefer entity-driven strategies over coarse intent guesses.
+        rich_address = bool(
+            entities.pincode
+            and (entities.office_name or entities.building_name or entities.road_name)
+        )
+        if rich_address:
+            return "full_address"
+        if entities.office_name:
+            return "office"
+        if entities.building_name and (entities.locality or entities.city or entities.pincode):
+            return "full_address"
+        if entities.building_name:
+            return "building"
+        if entities.road_name and not entities.pincode:
+            return "road"
+        if entities.locality and entities.city and not entities.pincode:
+            return "locality"
+        if pincode or entities.pincode:
             return "pincode"
         if intent == "PINCODE_SEARCH":
             return "pincode"
@@ -391,6 +417,22 @@ def _load_json_config(config_path: str | Path) -> dict[str, Any]:
     return data
 
 
+def _default_output_path(query: str) -> Path:
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", (query or "search").strip().lower()).strip("_")
+    slug = slug[:40] or "search"
+    return DEFAULT_SEARCH_OUTPUT_DIR / f"{stamp}_{slug}.json"
+
+
+def _save_search_output(payload: dict[str, Any], output_path: Path) -> Path:
+    ensure_parent_directory(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(payload, indent=2, ensure_ascii=False)
+    output_path.write_text(text, encoding="utf-8")
+    (output_path.parent / "latest_search.json").write_text(text, encoding="utf-8")
+    return output_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Indian Address Search")
 
@@ -415,6 +457,23 @@ def main() -> None:
     parser.add_argument("--distance")
 
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Print the full JSON response (default: show best match only).",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Optional path for JSON output. Defaults to datasets/search_results/.",
+    )
+    parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="Print results only; do not write to datasets/search_results/.",
+    )
 
     args = parser.parse_args()
 
@@ -467,7 +526,34 @@ def main() -> None:
         distance=args.distance,
     )
 
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    if args.verbose:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    if not args.no_save:
+        output_path = args.output or _default_output_path(args.query)
+        saved = _save_search_output(result, output_path)
+        print(f"Saved search output: {saved}", flush=True)
+
+    _print_best_match(result)
+
+
+def _print_best_match(result: dict[str, Any]) -> None:
+    """Print the single top-1 best match as the main CLI answer."""
+    best = result.get("best_match")
+    print("\n" + "=" * 64)
+    if not best:
+        print("BEST MATCH: no results found")
+        print("=" * 64)
+        return
+    print("BEST MATCH")
+    print(f"  Address    : {best.get('full_address') or '-'}")
+    print(f"  Locality   : {best.get('locality') or '-'}")
+    print(f"  City       : {best.get('city_name') or best.get('district_name') or '-'}")
+    print(f"  State      : {best.get('state_name') or '-'}")
+    print(f"  Pincode    : {best.get('pincode') or '-'}")
+    print(f"  Confidence : {best.get('confidence')} ({best.get('confidence_label')})")
+    print(f"  Why        : {best.get('explanation')}")
+    print("=" * 64)
 
 if __name__ == "__main__":
     main()

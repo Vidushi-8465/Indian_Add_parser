@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from search.locality_aliases import locality_variants
+
 
 class QueryBuilder:
     """Build Elasticsearch queries for normalized address search."""
@@ -77,7 +79,7 @@ class QueryBuilder:
         should = self._boost_clauses(parsed_entities or {})
         if query:
             must.append(self._multi_match_clause(query, self.BOOSTED_SEARCH_FIELDS, query_type="phrase"))
-        must.extend(self._location_match_clauses(filters, prefer_phrase=True, include_pincode=True))
+        should.extend(self._location_match_clauses(filters, prefer_phrase=True, include_pincode=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_fuzzy_query(
@@ -107,7 +109,7 @@ class QueryBuilder:
                     fuzziness=self.fuzzy_fuzziness,
                 )
             )
-        must.extend(self._location_match_clauses(filters, include_pincode=True))
+        should.extend(self._location_match_clauses(filters, include_pincode=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_phrase_query(
@@ -122,7 +124,7 @@ class QueryBuilder:
         should = self._boost_clauses(parsed_entities or {})
         if query:
             must.append(self._match_phrase_clause("full_address", query))
-        must.extend(self._location_match_clauses(filters, prefer_phrase=True, include_pincode=True))
+        should.extend(self._location_match_clauses(filters, prefer_phrase=True, include_pincode=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_autocomplete_query(
@@ -143,7 +145,7 @@ class QueryBuilder:
                     query_type="bool_prefix",
                 )
             )
-        must.extend(self._location_match_clauses(filters, include_pincode=True))
+        should.extend(self._location_match_clauses(filters, include_pincode=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_city_query(
@@ -158,7 +160,7 @@ class QueryBuilder:
         should = self._boost_clauses(parsed_entities or {})
         if query:
             must.append(self._multi_match_clause(query, ["city_name^5", "locality^3", "district_name^2", "state_name^1.5", "full_address^1.5"]))
-        must.extend(self._location_match_clauses(filters, include_city=True, include_locality=True, include_district=True, include_state=True))
+        should.extend(self._location_match_clauses(filters, include_city=True, include_locality=True, include_district=True, include_state=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_locality_query(
@@ -169,11 +171,57 @@ class QueryBuilder:
         geo: dict[str, Any],
         parsed_entities: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        entities = parsed_entities or {}
+        locality = filters.get("locality") or entities.get("locality")
+        city = filters.get("city") or entities.get("city")
         must: list[dict[str, Any]] = []
-        should = self._boost_clauses(parsed_entities or {})
-        if query:
-            must.append(self._multi_match_clause(query, ["locality^5", "road_name^4", "building_name^3", "city_name^2", "district_name^1.5", "state_name^1", "full_address^2"]))
-        must.extend(self._location_match_clauses(filters, include_city=True, include_locality=True, include_district=True, include_state=True))
+        should = self._boost_clauses(entities)
+
+        # Prefer the detected locality name (+ spelling variants) so
+        # "hinjewadi pune" retrieves Hinjavadi and not Puneja / Shindewadi.
+        if locality:
+            locality_should: list[dict[str, Any]] = []
+            for variant in locality_variants(locality) or [locality]:
+                locality_should.extend(
+                    [
+                        {"match_phrase": {"locality": {"query": variant, "slop": self.phrase_slop, "boost": 10}}},
+                        {
+                            "match": {
+                                "locality": {
+                                    "query": variant,
+                                    "fuzziness": self.fuzzy_fuzziness,
+                                    "boost": 6,
+                                }
+                            }
+                        },
+                        {"match_phrase": {"full_address": {"query": variant, "slop": self.phrase_slop, "boost": 4}}},
+                    ]
+                )
+            must.append({"bool": {"should": locality_should, "minimum_should_match": 1}})
+        elif query:
+            must.append(
+                self._multi_match_clause(
+                    query,
+                    ["locality^5", "road_name^4", "building_name^3", "city_name^2", "district_name^1.5", "state_name^1", "full_address^2"],
+                )
+            )
+
+        if city:
+            for variant in locality_variants(city) or [city]:
+                should.append(self._match_clause("city_name", variant, boost=6))
+                should.append(self._match_clause("district_name", variant, boost=4))
+                should.append(self._match_phrase_clause("full_address", variant))
+
+        should.extend(
+            self._location_match_clauses(
+                filters,
+                include_city=True,
+                include_locality=True,
+                include_district=True,
+                include_state=True,
+                prefer_phrase=True,
+            )
+        )
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_district_query(
@@ -188,7 +236,7 @@ class QueryBuilder:
         should = self._boost_clauses(parsed_entities or {})
         if query:
             must.append(self._multi_match_clause(query, ["district_name^5", "city_name^3", "locality^2", "state_name^2", "full_address^1.5"]))
-        must.extend(self._location_match_clauses(filters, include_district=True, include_city=True, include_locality=True, include_state=True))
+        should.extend(self._location_match_clauses(filters, include_district=True, include_city=True, include_locality=True, include_state=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_state_query(
@@ -203,7 +251,7 @@ class QueryBuilder:
         should = self._boost_clauses(parsed_entities or {})
         if query:
             must.append(self._multi_match_clause(query, ["state_name^5", "district_name^3", "city_name^2", "locality^1.5", "full_address^1.5"]))
-        must.extend(self._location_match_clauses(filters, include_state=True, include_district=True, include_city=True, include_locality=True))
+        should.extend(self._location_match_clauses(filters, include_state=True, include_district=True, include_city=True, include_locality=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_building_query(
@@ -218,7 +266,7 @@ class QueryBuilder:
         should = self._boost_clauses(parsed_entities or {})
         if query:
             must.append(self._multi_match_clause(query, ["building_name^5", "office_name^4", "road_name^3", "locality^2", "city_name^1.5", "district_name^1.25", "state_name^1", "full_address^2"]))
-        must.extend(self._location_match_clauses(filters, include_building=True, include_road=True, include_locality=True, include_city=True, include_district=True, include_state=True))
+        should.extend(self._location_match_clauses(filters, include_building=True, include_road=True, include_locality=True, include_city=True, include_district=True, include_state=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_office_query(
@@ -229,12 +277,44 @@ class QueryBuilder:
         geo: dict[str, Any],
         parsed_entities: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        entities = parsed_entities or {}
         must: list[dict[str, Any]] = []
-        should = self._boost_clauses(parsed_entities or {})
-        office_query = (parsed_entities or {}).get("office_name") or query
+        should = self._boost_clauses(entities)
+        office_query = entities.get("office_name") or query
         if office_query:
-            must.append(self._multi_match_clause(office_query, ["office_name^5", "building_name^3", "locality^2", "city_name^1.5", "district_name^1.25", "state_name^1", "full_address^2"]))
-        must.extend(self._location_match_clauses(filters, include_building=True, include_locality=True, include_city=True, include_district=True, include_state=True))
+            must.append(
+                {
+                    "bool": {
+                        "should": [
+                            {"match_phrase": {"office_name": {"query": office_query, "slop": self.phrase_slop, "boost": 12}}},
+                            {"match": {"office_name": {"query": office_query, "fuzziness": self.fuzzy_fuzziness, "boost": 8}}},
+                            {"match_phrase": {"building_name": {"query": office_query, "slop": self.phrase_slop, "boost": 6}}},
+                            {"match_phrase": {"full_address": {"query": office_query, "slop": self.phrase_slop, "boost": 5}}},
+                            {
+                                "multi_match": {
+                                    "query": office_query,
+                                    "type": "best_fields",
+                                    "fields": ["office_name^6", "building_name^4", "full_address^3", "searchable_text^2"],
+                                    "fuzziness": self.fuzzy_fuzziness,
+                                }
+                            },
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            )
+        should.extend(
+            self._location_match_clauses(
+                filters,
+                include_building=True,
+                include_locality=True,
+                include_city=True,
+                include_district=True,
+                include_state=True,
+                include_pincode=True,
+                prefer_phrase=True,
+            )
+        )
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_road_query(
@@ -249,7 +329,7 @@ class QueryBuilder:
         should = self._boost_clauses(parsed_entities or {})
         if query:
             must.append(self._multi_match_clause(query, ["road_name^5", "building_name^3", "locality^2", "city_name^1.5", "district_name^1.25", "state_name^1", "full_address^2"]))
-        must.extend(self._location_match_clauses(filters, include_road=True, include_building=True, include_locality=True, include_city=True, include_district=True, include_state=True))
+        should.extend(self._location_match_clauses(filters, include_road=True, include_building=True, include_locality=True, include_city=True, include_district=True, include_state=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_full_address_query(
@@ -263,9 +343,10 @@ class QueryBuilder:
         must: list[dict[str, Any]] = []
         should = self._boost_clauses(parsed_entities or {})
         if query:
-            must.append(self._match_phrase_clause("full_address", query))
-            should.append(self._multi_match_clause(query, self.BOOSTED_SEARCH_FIELDS))
-        must.extend(self._location_match_clauses(filters, include_building=True, include_road=True, include_locality=True, include_city=True, include_district=True, include_state=True, include_pincode=True))
+            # Token-based match for recall; exact-phrase match only boosts ranking.
+            must.append(self._multi_match_clause(query, self.BOOSTED_SEARCH_FIELDS))
+            should.append(self._match_phrase_clause("full_address", query))
+        should.extend(self._location_match_clauses(filters, include_building=True, include_road=True, include_locality=True, include_city=True, include_district=True, include_state=True, include_pincode=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_pincode_query(
@@ -281,7 +362,7 @@ class QueryBuilder:
         pincode = filters.get("pincode") or (query if query and query.isdigit() else None)
         if pincode:
             must.append({"term": {"pincode": pincode}})
-        must.extend(self._location_match_clauses(filters, include_city=True, include_locality=True, include_district=True, include_state=True))
+        should.extend(self._location_match_clauses(filters, include_city=True, include_locality=True, include_district=True, include_state=True))
         return self._wrap_bool_query(must=must, should=should, filters={**filters, "pincode": pincode}, geo=geo, size=size)
 
     def build_hierarchical_admin_query(
@@ -296,7 +377,7 @@ class QueryBuilder:
         should = self._boost_clauses(parsed_entities or {})
         if filters.get("building") or query:
             must.append(self._multi_match_clause(filters.get("building") or query or "", ["building_name^4", "office_name^3", "road_name^2", "locality^1.5", "city_name^1.25", "district_name^1", "state_name^1", "full_address^2"]))
-        must.extend(self._location_match_clauses(filters, include_building=True, include_road=True, include_locality=True, include_city=True, include_district=True, include_state=True, include_pincode=True))
+        should.extend(self._location_match_clauses(filters, include_building=True, include_road=True, include_locality=True, include_city=True, include_district=True, include_state=True, include_pincode=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_hierarchical_pincode_query(
@@ -317,7 +398,7 @@ class QueryBuilder:
             must.append({"term": {"pincode": filters["pincode"]}})
         elif query:
             must.append({"term": {"pincode": query}})
-        must.extend(self._location_match_clauses(filters, include_locality=True, include_district=True, include_city=True, include_state=True, include_pincode=True))
+        should.extend(self._location_match_clauses(filters, include_locality=True, include_district=True, include_city=True, include_state=True, include_pincode=True))
         return self._wrap_bool_query(must=must, should=should, filters=filters, geo=geo, size=size)
 
     def build_geospatial_query(
@@ -388,20 +469,11 @@ class QueryBuilder:
                 }
             )
 
-        bool_query: dict[str, Any] = {
-            "must": must or [{"match_all": {}}],
-            "filter": filter_clauses,
-        }
-        if should:
-            bool_query["should"] = should
-            bool_query["minimum_should_match"] = 1
-
         return self._build_function_score(
-            must=bool_query.get("must", []),
-            should=bool_query.get("should", []),
-            filter_clauses=bool_query["filter"],
+            must=must or [{"match_all": {}}],
+            should=should,
+            filter_clauses=filter_clauses,
             size=size,
-            minimum_should_match=bool_query.get("minimum_should_match"),
         )
 
     def _build_function_score(
@@ -418,7 +490,13 @@ class QueryBuilder:
         }
         if should:
             bool_query["should"] = should
-            bool_query["minimum_should_match"] = minimum_should_match or 1
+            has_real_must = any("match_all" not in clause for clause in bool_query["must"])
+            if minimum_should_match:
+                bool_query["minimum_should_match"] = minimum_should_match
+            elif not has_real_must:
+                # No discriminating must clause -> require at least one should match.
+                # When a real must clause exists, should clauses are pure ranking boosts.
+                bool_query["minimum_should_match"] = 1
 
         return {
             "size": size,
@@ -444,9 +522,22 @@ class QueryBuilder:
         if parsed_entities.get("landmark"):
             clauses.append(self._multi_match_clause(parsed_entities["landmark"], ["full_address^2", "locality^1.5", "building_name^1.5"], query_type="phrase"))
         if parsed_entities.get("locality"):
-            clauses.append(self._match_clause("locality", parsed_entities["locality"], boost=3))
+            for variant in locality_variants(parsed_entities["locality"]) or [parsed_entities["locality"]]:
+                clauses.append(
+                    {
+                        "match_phrase": {
+                            "locality": {
+                                "query": variant,
+                                "slop": self.phrase_slop,
+                                "boost": 10,
+                            }
+                        }
+                    }
+                )
         if parsed_entities.get("city"):
-            clauses.append(self._match_clause("city_name", parsed_entities["city"], boost=2.5))
+            for variant in locality_variants(parsed_entities["city"]) or [parsed_entities["city"]]:
+                clauses.append(self._match_clause("city_name", variant, boost=6))
+                clauses.append(self._match_clause("district_name", variant, boost=4))
         if parsed_entities.get("district"):
             clauses.append(self._match_clause("district_name", parsed_entities["district"], boost=2))
         if parsed_entities.get("state"):

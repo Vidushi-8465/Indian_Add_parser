@@ -56,11 +56,19 @@ models/*.ckpt
 datasets/raw/*
 datasets/master/*
 datasets/processed/*
+datasets/search_results/*
+datasets/ranking/*
 
 # Keep folder structure
 !datasets/raw/.gitkeep
 !datasets/master/.gitkeep
 !datasets/processed/.gitkeep
+!datasets/search_results/.gitkeep
+!datasets/ranking/.gitkeep
+
+# Generated ranking model (can be large; rebuild via scripts/train_ranker.py)
+models/ranking_model.json
+models/ranking_model.json.features.json
 
 ############################################################
 # Temporary Files

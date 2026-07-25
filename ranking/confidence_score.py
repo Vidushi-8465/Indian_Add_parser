@@ -12,7 +12,7 @@ class ConfidenceScoreBreakdown:
 
 
 class ConfidenceScorer:
-    """Blend model, BM25, exact match, and quality signals into a confidence score."""
+    """Blend model, BM25, entity fit, and quality into a confidence score."""
 
     def score(
         self,
@@ -21,18 +21,29 @@ class ConfidenceScorer:
         bm25_score: float | None,
         exact_match_count: float | int = 0,
         quality_score: float | None = None,
+        entity_fit: float = 0.0,
     ) -> ConfidenceScoreBreakdown:
         normalized_model = self._sigmoid(model_score) if model_score is not None else 0.0
         normalized_bm25 = self._normalize_bm25(bm25_score)
         normalized_quality = self._normalize_quality(quality_score)
-        exact_bonus = min(1.0, float(exact_match_count) / 6.0)
+        exact_bonus = min(1.0, float(exact_match_count) / 2.0)
+        fit = max(0.0, min(1.0, float(entity_fit)))
 
-        confidence = (
-            0.55 * normalized_model
-            + 0.20 * normalized_bm25
-            + 0.15 * exact_bonus
-            + 0.10 * normalized_quality
-        )
+        if model_score is None:
+            confidence = (
+                0.10 * normalized_bm25
+                + 0.20 * exact_bonus
+                + 0.55 * fit
+                + 0.15 * normalized_quality
+            )
+        else:
+            confidence = (
+                0.30 * normalized_model
+                + 0.05 * normalized_bm25
+                + 0.20 * exact_bonus
+                + 0.35 * fit
+                + 0.10 * normalized_quality
+            )
         confidence = round(max(0.0, min(0.99, confidence)), 4)
         return ConfidenceScoreBreakdown(confidence=confidence, label=self._label(confidence))
 

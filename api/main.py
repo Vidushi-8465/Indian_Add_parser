@@ -46,6 +46,7 @@ def _to_response(result: dict) -> SearchResponse:
         strategy=result.get("strategy", "auto"),
         total_hits=int(result.get("total_hits", 0)),
         took_ms=int(result.get("took_ms", 0)),
+        best_match=result.get("best_match"),
         candidates=candidates,
     )
 

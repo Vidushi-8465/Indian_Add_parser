@@ -71,4 +71,5 @@ class SearchResponse(BaseModel):
     strategy: str
     total_hits: int
     took_ms: int
+    best_match: dict[str, Any] | None = None
     candidates: list[AddressCandidate]

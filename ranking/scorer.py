@@ -12,9 +12,9 @@ import math
 class RankingScoreCombiner:
     """Fallback score combiner used when an ML model is unavailable."""
 
-    model_weight: float = 0.60
+    model_weight: float = 0.45
     bm25_weight: float = 0.15
-    exact_match_weight: float = 0.15
+    exact_match_weight: float = 0.30
     quality_weight: float = 0.10
 
     def combine(
@@ -24,18 +24,29 @@ class RankingScoreCombiner:
         bm25_score: float | None,
         exact_match_count: float | int = 0,
         quality_score: float | None = None,
+        entity_fit: float = 0.0,
     ) -> float:
         normalized_model = self._sigmoid(model_score) if model_score is not None else 0.0
         normalized_bm25 = self._normalize_bm25(bm25_score)
         normalized_quality = self._normalize_quality(quality_score)
-        exact_bonus = min(1.0, float(exact_match_count) / 6.0)
+        exact_bonus = min(1.0, float(exact_match_count) / 2.0)
+        fit = max(0.0, min(1.0, float(entity_fit)))
 
-        score = (
-            self.model_weight * normalized_model
-            + self.bm25_weight * normalized_bm25
-            + self.exact_match_weight * exact_bonus
-            + self.quality_weight * normalized_quality
-        )
+        if model_score is None:
+            score = (
+                0.10 * normalized_bm25
+                + 0.20 * exact_bonus
+                + 0.55 * fit
+                + 0.15 * normalized_quality
+            )
+        else:
+            score = (
+                0.30 * normalized_model
+                + 0.05 * normalized_bm25
+                + 0.20 * exact_bonus
+                + 0.35 * fit
+                + 0.10 * normalized_quality
+            )
         return round(max(0.0, min(1.0, score)), 6)
 
     @staticmethod

@@ -1,9 +1,9 @@
 """ML ranking utilities for the search pipeline."""
 
-from .confidence_score import ConfidenceScorer
-from .feature_engineering import RankingFeatureBuilder
-from .ranker import MLRanker
-from .scorer import RankingEvaluator, RankingScoreCombiner
+from __future__ import annotations
+
+from typing import Any
+
 from .similarity import (
     common_token_count,
     exact_match,
@@ -32,3 +32,27 @@ __all__ = [
     "token_sort_ratio",
     "tokenize",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "ConfidenceScorer":
+        from .confidence_score import ConfidenceScorer
+
+        return ConfidenceScorer
+    if name == "RankingEvaluator":
+        from .scorer import RankingEvaluator
+
+        return RankingEvaluator
+    if name == "RankingFeatureBuilder":
+        from .feature_engineering import RankingFeatureBuilder
+
+        return RankingFeatureBuilder
+    if name == "RankingScoreCombiner":
+        from .scorer import RankingScoreCombiner
+
+        return RankingScoreCombiner
+    if name == "MLRanker":
+        from .ranker import MLRanker
+
+        return MLRanker
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

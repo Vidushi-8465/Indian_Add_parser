@@ -51,6 +51,7 @@ standard_columns:
   - gram_panchayat_name
   - road_name
   - building_name
+  - building_number
   - office_name
   - office_type
   - delivery_status
@@ -62,6 +63,8 @@ standard_columns:
   - longitude
   - census_2001_code
   - census_2011_code
+  - city_code
+  - full_address
   - source_file
 
 column_aliases:
@@ -74,6 +77,10 @@ column_aliases:
     - serial_number
     - sr no
     - sr. no
+    - building rjid
+    - building_rjid
+    - objectid
+    - object id
   pincode:
     - pincode
     - pin code
@@ -120,6 +127,7 @@ column_aliases:
     - district name(in english)
     - district
     - dist name
+    - districtname
   subdistrict_code:
     - subdistrict code
     - sub-district code
@@ -156,6 +164,11 @@ column_aliases:
     - town
     - city name
     - city_name
+    - cityname
+  city_code:
+    - city code
+    - city_code
+    - citycode
   locality:
     - locality
     - village name
@@ -163,10 +176,14 @@ column_aliases:
     - village
     - area
     - locality name
+    - localityname
+    - villagename
+    - village name in english
   locality_code:
     - village code
     - locality code
     - locality_code
+    - localitycode
   village_category:
     - village category
   village_status:
@@ -224,8 +241,34 @@ column_aliases:
     - building
     - building name
     - building_name
+    - bldgname
+    - bldg name
     - house name
     - premise
+  building_number:
+    - building number
+    - building_number
+    - building no
+    - building_no
+    - bldgno
+    - bldg no
+    - bldg_no
+    - house number
+    - house no
+    - house_no
+  full_address:
+    - full address
+    - full_address
+    - bldg address
+    - bldg_address
+    - building address
+    - building_address
+    - city address
+    - city_address
+    - district address
+    - district_address
+    - address
+    - complete address
   office_name:
     - officename
     - office name
@@ -288,6 +331,9 @@ dtype_rules:
     - gram_panchayat_code
     - census_2001_code
     - census_2011_code
+    - city_code
+    - building_number
+    - full_address
   float_columns:
     - latitude
     - longitude

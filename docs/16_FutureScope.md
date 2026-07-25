@@ -325,12 +325,13 @@ Best Address Returned
 - Docker / docker-compose deployment
 - Test Suite (search, API, parser, preprocessing, ingestion, hierarchy)
 
+- ML training pipeline: self-supervised dataset generator (scripts/build_ranking_dataset.py) + XGBoost trainer (scripts/train_ranker.py); model auto-loaded by the search pipeline
+
 ## 🚧 In Progress / Optional
-- Training a real XGBoost model (needs a labeled relevance dataset; heuristic used until then)
 - Performance tuning (caching, batch inference)
+- Improving ML model quality with more/real labeled queries
 
 ## ❌ Remaining
-- Labeled training-dataset generation for ML re-ranker
 - Production hardening (auth, rate limiting, monitoring dashboards)
 
 See `docs/18_EndToEndRunGuide.md` for the full start-to-end command sequence.

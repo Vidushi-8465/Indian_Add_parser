@@ -12,6 +12,7 @@ paths:
   hierarchy_cities: datasets/hierarchy/cities.csv
 
 full_address_components:
+  - building_number
   - building_name
   - road_name
   - locality
@@ -24,20 +25,24 @@ full_address_separator: ", "
 
 quality_weights:
   building_name: 10
+  building_number: 5
   road_name: 10
   locality: 15
   city_name: 15
   district_name: 15
   state_name: 15
   pincode: 10
+  full_address: 10
   latitude: 5
   longitude: 5
 
 symbol_normalization_columns:
   - building_name
+  - building_number
   - road_name
   - locality
   - city_name
+  - full_address
   - office_name
   - local_body_name
 
@@ -80,8 +85,10 @@ abbreviation_columns:
   - office_name
   - road_name
   - building_name
+  - building_number
   - locality
   - local_body_name
+  - full_address
 
 fill_hierarchy:
   state_code: state_name
@@ -108,3 +115,6 @@ string_columns:
   - local_body_code
   - census_2001_code
   - census_2011_code
+  - city_code
+  - building_number
+  - full_address

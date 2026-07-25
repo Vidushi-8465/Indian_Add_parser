@@ -24,6 +24,9 @@
   ],
   "office_types": [
     "office",
+    "offices",
+    "service",
+    "services",
     "gpo",
     "headquarters",
     "hq",
@@ -34,6 +37,16 @@
     "karyalaya",
     "chamber",
     "chambers",
-    "corporate"
+    "corporate",
+    "corp",
+    "ltd",
+    "limited",
+    "pvt",
+    "private",
+    "bank",
+    "hospital",
+    "school",
+    "institute",
+    "company"
   ]
 }
